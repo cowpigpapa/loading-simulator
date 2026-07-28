@@ -27,6 +27,8 @@ function bindEvents(){
   $('containerType').onchange=updateContainerSpec;
   $('simulate').onclick=simulate;
   $('recalculateList').onclick=simulate;
+  $('useDunnage').onchange=markSimulationChanged;
+  $('useAirbags').onchange=markSimulationChanged;
   $('fileInput').onchange=e=>readFile(e.target.files[0]);
   $('downloadTemplate').onclick=downloadTemplate;
   $('exportPlan').onclick=exportPlan;
@@ -74,6 +76,7 @@ function updateContainerSpec(){const c=CONTAINERS[$('containerType').value]||CON
 
 function simulate(){
   if(!products.length){alert('먼저 제품을 하나 이상 추가해 주세요.');return}
+  document.querySelector('.securing-menu').open=false;
   const c=CONTAINERS[$('containerType').value], priority=$('optimization').value;
   let units=products.flatMap((p,pi)=>Array.from({length:p.qty},(_,n)=>({...p,pi,unit:n+1,volume:p.l*p.w*p.h})));
   if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);
@@ -95,6 +98,7 @@ function simulate(){
   const loads=[result];let remaining=rejected;
   while(remaining.length&&loads.length<50){const next=packAdditional(c,remaining,priority);if(!next.placed.length)break;loads.push(next);remaining=next.rejected}
   loads.forEach((load,i)=>load.containerNumber=i+1);
+  loads.forEach(load=>load.securing=buildSecuringPlan(load));
   shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};
   result=loads[0];activeContainer=0;
   visibleStep=placed.length;stopPlayback();
@@ -105,6 +109,18 @@ function packAdditional(c,units,priority){
   const placed=[],rejected=[];let totalWeight=0;const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}];
   for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h){const score=s.z*1e12+s.x*1e5+s.y+(s.l*s.w*s.h-d[0]*d[1]*d[2])/1e8;if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
   placed.sort((a,b)=>b.x-a.x||a.z-b.z||a.y-b.y).forEach((p,i)=>p.order=i+1);const volume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0);return{container:c,placed,rejected,totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:totalWeight/c.maxWeight*100};
+}
+function buildSecuringPlan(load){
+  const dunnage=[],airbags=[],floorItems=load.placed.filter(p=>p.z===0),c=load.container;
+  if($('useDunnage').checked)floorItems.forEach(p=>{const length=Math.min(90,Math.max(50,p.l*.08));[.25,.75].forEach(r=>dunnage.push({type:'dunnage',x:p.x+p.l*r-length/2,y:p.y,z:0,l:length,w:p.w,h:45,product:p.name}))});
+  if($('useAirbags').checked){
+    const candidates=[];
+    floorItems.forEach(p=>{const left=p.y,right=c.w-(p.y+p.w),length=Math.min(700,p.l*.6),x=p.x+(p.l-length)/2,height=Math.min(1200,p.h*.72);if(left>=120&&left<=600)candidates.push({type:'airbag',x,y:0,z:Math.max(20,p.h*.14),l:length,w:left,h:height,location:'좌측 벽 간극',product:p.name});if(right>=120&&right<=600)candidates.push({type:'airbag',x,y:p.y+p.w,z:Math.max(20,p.h*.14),l:length,w:right,h:height,location:'우측 벽 간극',product:p.name})});
+    const sorted=[...floorItems].sort((a,b)=>a.x-b.x);sorted.forEach((p,i)=>{let nearest=null;for(let j=i+1;j<sorted.length;j++){const q=sorted[j],gap=q.x-(p.x+p.l),overlap=Math.min(p.y+p.w,q.y+q.w)-Math.max(p.y,q.y);if(gap>0&&overlap>150&&(!nearest||gap<nearest.gap))nearest={q,gap,overlap}}if(nearest&&nearest.gap>=120&&nearest.gap<=600)candidates.push({type:'airbag',x:p.x+p.l,y:Math.max(p.y,nearest.q.y),z:Math.max(20,Math.min(p.h,nearest.q.h)*.14),l:nearest.gap,w:nearest.overlap,h:Math.min(1200,Math.min(p.h,nearest.q.h)*.72),location:'화물 사이 간극',product:`${p.name} / ${nearest.q.name}`})});
+    const free=q=>!load.placed.some(p=>q.x<p.x+p.l&&q.x+q.l>p.x&&q.y<p.y+p.w&&q.y+q.w>p.y&&q.z<p.z+p.h&&q.z+q.h>p.z);
+    candidates.filter(free).forEach(q=>{const duplicate=airbags.some(a=>Math.abs(a.x-q.x)<20&&Math.abs(a.y-q.y)<20&&Math.abs(a.z-q.z)<20);if(!duplicate&&airbags.length<24)airbags.push(q)});
+  }
+  return{dunnage,airbags};
 }
 function uniqueRotations(p){const a=[[p.l,p.w,p.h],[p.w,p.l,p.h],[p.l,p.h,p.w],[p.h,p.l,p.w],[p.w,p.h,p.l],[p.h,p.w,p.l]];return a.filter((x,i)=>a.findIndex(y=>y.join()==x.join())===i)}
 function allowedRotations(p){return p.rotate?uniqueRotations(p):uniqueRotations({l:p.l,w:p.w,h:p.h}).filter(d=>d[2]===p.h)}
@@ -130,7 +146,7 @@ function updateResults(){
   $('loadedCount').textContent=`${r.placed.length}개`;$('loadedDetail').textContent=`컨테이너 ${r.containerNumber||1} · 전체 ${total}개`;$('totalWeight').textContent=`${r.totalWeight.toLocaleString()} kg`;$('weightDetail').textContent=`허용 ${(r.container.maxWeight/1000).toFixed(1)} t`;
   const groups=[];r.placed.forEach(p=>{let g=groups.find(x=>x.name===p.name&&x.z===p.z&&x.x===p.x);if(g)g.count++;else groups.push({...p,count:1})});
   $('sequenceEmpty').style.display='none';$('sequenceList').innerHTML=groups.map((p,i)=>`<li><span class="num">${String(i+1).padStart(2,'0')}</span><span class="dot" style="background:${p.color};border-radius:${p.shape==='cylinder'?'50%':'2px'}"></span><div><strong>${esc(p.name)} × ${p.count} · ${p.shape==='cylinder'?'원통형':'박스형'}</strong><br><small>문에서 ${(p.x/1000).toFixed(2)}m 안쪽 · 바닥에서 ${(p.z/1000).toFixed(2)}m 높이</small></div><small>${p.l}×${p.w}×${p.h}</small></li>`).join('');$('exportPlan').disabled=false;
-  $('playback').style.display='flex';$('stepRange').max=r.placed.length;$('totalSteps').textContent=r.placed.length;setStep(r.placed.length);renderRecommendation();requestAnimationFrame(syncSequenceHeight);
+  $('playback').style.display='flex';$('stepRange').max=r.placed.length;$('totalSteps').textContent=r.placed.length;setStep(r.placed.length);renderRecommendation();renderSecuringRecommendation();requestAnimationFrame(syncSequenceHeight);
 }
 function toggleSequence(){const plan=document.querySelector('.loading-plan'),expanded=plan.classList.toggle('expanded');$('toggleSequence').textContent=expanded?'접기':'전체 보기';if(!expanded)requestAnimationFrame(syncSequenceHeight)}
 function syncSequenceHeight(){const plan=document.querySelector('.loading-plan'),list=$('sequenceList'),panel=document.querySelector('.control-panel');if(!plan||!list||!panel||plan.classList.contains('expanded'))return;const available=Math.max(220,Math.round(panel.getBoundingClientRect().bottom-list.getBoundingClientRect().top-24));list.style.setProperty('--sequence-max-height',`${available}px`)}
@@ -140,6 +156,7 @@ function renderRecommendation(){
   const el=$('recommendation');if(!shipment||shipment.containers.length===1&&!shipment.unallocated.length){el.hidden=true;el.innerHTML='';return}el.hidden=false;const c=result.container,count=shipment.containers.length,left=shipment.unallocated.length;
   el.innerHTML=`<div><strong>${c.name} ${count}대로 분할 적재합니다.</strong><p>3D 화면 위의 좌우 화살표와 번호를 이용해 각 컨테이너의 배치와 적재 순서를 확인하세요.${left?` 규격상 적재할 수 없는 화물 ${left}개는 별도 검토가 필요합니다.`:''}</p></div>`;
 }
+function renderSecuringRecommendation(){const el=$('securingRecommendation'),plan=result.securing;if(!plan||(!plan.dunnage.length&&!plan.airbags.length)){el.hidden=true;el.innerHTML='';return}el.hidden=false;const items=[...plan.dunnage.slice(0,4).map((d,i)=>`<div><strong>부목 ${i+1} · ${esc(d.product)}</strong>X ${(d.x/1000).toFixed(2)}m · Y ${(d.y/1000).toFixed(2)}m · 폭 ${(d.w/1000).toFixed(2)}m</div>`),...plan.airbags.slice(0,8).map((a,i)=>`<div><strong>에어백 ${i+1} · ${a.location}</strong>X ${(a.x/1000).toFixed(2)}m · Y ${(a.y/1000).toFixed(2)}m · Z ${(a.z/1000).toFixed(2)}m</div>`)];el.innerHTML=`<h3>컨테이너 ${result.containerNumber} 화물 고정재 추천</h3><p>하부 부목 ${plan.dunnage.length}개 · 고정용 에어백 ${plan.airbags.length}개${plan.dunnage.length>4||plan.airbags.length>8?' · 대표 위치만 표시':''}. 실제 설치 전 화물 강도와 제조사 지침을 확인하세요.</p><div class="securing-items">${items.join('')}</div>`}
 function setStep(step){if(!result)return;visibleStep=Math.max(0,Math.min(result.placed.length,step));$('currentStep').textContent=visibleStep;$('stepRange').value=visibleStep;$('prevStep').disabled=visibleStep===0;$('nextStep').disabled=visibleStep===result.placed.length;draw()}
 function togglePlayback(){if(playTimer){stopPlayback();return}if(visibleStep>=result.placed.length)setStep(0);$('playSteps').textContent='Ⅱ';playTimer=setInterval(()=>{if(visibleStep>=result.placed.length){stopPlayback();return}setStep(visibleStep+1)},650)}
 function stopPlayback(){if(playTimer)clearInterval(playTimer);playTimer=null;if($('playSteps'))$('playSteps').textContent='▶'}
@@ -156,6 +173,7 @@ function drawThree(){
   initThree();if(!threeView)return;const {renderer,scene,camera:cam,group}=threeView,c=result.container;disposeThreeGroup();
   const visible=result.placed.slice(0,visibleStep),toColor=hex=>new THREE.Color(hex),edgeMat=new THREE.LineBasicMaterial({color:0x315e4c,transparent:true,opacity:.65});
   visible.forEach(p=>{let geometry;if(p.shape==='cylinder'){geometry=new THREE.CylinderGeometry(.5,.5,1,28);geometry.scale(p.l,p.h,p.w)}else geometry=new THREE.BoxGeometry(p.l,p.h,p.w);const material=new THREE.MeshStandardMaterial({color:toColor(p.color),roughness:.72,metalness:.03,transparent:true,opacity:.94,side:THREE.FrontSide}),mesh=new THREE.Mesh(geometry,material);mesh.position.set(p.x+p.l/2,p.z+p.h/2,p.y+p.w/2);group.add(mesh);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color:0x263b32,transparent:true,opacity:.42}));edges.position.copy(mesh.position);group.add(edges)});
+  if(visibleStep===result.placed.length&&result.securing){result.securing.dunnage.forEach(d=>{const geometry=new THREE.BoxGeometry(d.l,d.h,d.w),mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x9a632f,roughness:.9}));mesh.position.set(d.x+d.l/2,d.h/2+3,d.y+d.w/2);group.add(mesh)});result.securing.airbags.forEach(a=>{const geometry=new THREE.BoxGeometry(a.l,a.h,a.w),material=new THREE.MeshStandardMaterial({color:0x58a9dc,transparent:true,opacity:.55,roughness:.35}),mesh=new THREE.Mesh(geometry,material);mesh.position.set(a.x+a.l/2,a.z+a.h/2,a.y+a.w/2);group.add(mesh);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color:0x1e678f,transparent:true,opacity:.7}));edges.position.copy(mesh.position);group.add(edges)})}
   const frameGeo=new THREE.BoxGeometry(c.l,c.h,c.w),frame=new THREE.LineSegments(new THREE.EdgesGeometry(frameGeo),edgeMat);frame.position.set(c.l/2,c.h/2,c.w/2);group.add(frame);
   const floorGeo=new THREE.PlaneGeometry(c.l,c.w),floor=new THREE.Mesh(floorGeo,new THREE.MeshStandardMaterial({color:0xdfe9e2,transparent:true,opacity:.22,side:THREE.DoubleSide}));floor.rotation.x=-Math.PI/2;floor.position.set(c.l/2,0,c.w/2);group.add(floor);
   const target=new THREE.Vector3(c.l/2,c.h*.42,c.w/2),distance=Math.max(c.l,c.w*2.5,c.h*2.5)*1.25/camera.zoom;
