@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoadSpace — 컨테이너 적재 시뮬레이터</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="layout-fixes.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="LoadSpace 홈">
+      <span class="brand-mark"><span></span><span></span><span></span></span>
+      <span>LoadSpace</span>
+    </a>
+    <nav aria-label="주 메뉴">
+      <a class="active" href="#planner">적재 플래너</a>
+      <a href="#guide">사용 가이드</a>
+    </nav>
+    <button class="ghost-button" id="loadDemo">샘플 불러오기</button>
+  </header>
+
+  <main>
+    <section class="workspace" id="planner">
+      <aside class="control-panel">
+        <div class="control-heading"><div class="step-heading"><span>01</span><div><h2>제품 데이터</h2><p>직접 입력하거나 파일을 업로드하세요.</p></div></div><button class="top-simulate" id="simulate">시뮬레이션 실행 <b>→</b></button></div>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="manual" role="tab" aria-selected="true">직접 입력</button>
+          <button class="tab" data-tab="upload" role="tab" aria-selected="false">Excel / CSV</button>
+        </div>
+
+        <div class="tab-pane active" id="manualPane">
+          <div class="form-grid">
+            <label class="wide">제품명<input id="productName" value="산업용 펌프" placeholder="예: 산업용 펌프"></label>
+            <label>제품군<input id="productGroup" value="기계류" placeholder="예: 기계류"></label>
+            <label>수량<input id="productQty" type="number" min="1" value="4"></label>
+            <label>제품 형상<select id="productShape"><option value="box">박스형</option><option value="cylinder">원통형</option></select></label>
+            <label>길이 (mm)<input id="productLength" type="number" min="1" value="1200"></label>
+            <label>너비 (mm)<input id="productWidth" type="number" min="1" value="800"></label>
+            <label>높이 (mm)<input id="productHeight" type="number" min="1" value="900"></label>
+            <label>개당 중량 (kg)<input id="productWeight" type="number" min="0.1" step="0.1" value="420"></label>
+          </div>
+          <div class="option-row">
+            <label><input id="allowRotation" type="checkbox" checked> 눕혀서 적재 가능</label>
+            <label><input id="fragile" type="checkbox"> 상부 적재 금지</label>
+          </div>
+          <button class="add-button" id="addProduct">+ 제품 목록에 추가</button>
+        </div>
+
+        <div class="tab-pane" id="uploadPane">
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+            <span class="upload-icon">⇧</span>
+            <strong>Excel 또는 CSV 파일을 놓으세요</strong>
+            <small>필수 열: 제품명, 제품군, 길이, 너비, 높이, 중량, 수량</small>
+          </label>
+          <button class="text-button" id="downloadTemplate">CSV 템플릿 다운로드</button>
+        </div>
+
+        <div class="product-list-head"><strong>제품 목록</strong><span id="productCount">0개 품목 · 0박스</span></div>
+        <div class="product-list" id="productList"></div>
+
+        <div class="divider"></div>
+        <div class="step-heading compact"><span>02</span><div><h2>컨테이너 설정</h2></div></div>
+        <label class="container-select">컨테이너 규격
+          <select id="containerType"></select>
+        </label>
+        <div class="container-spec" id="containerSpec"></div>
+        <label class="priority-label">최적화 기준
+          <select id="optimization">
+            <option value="volume">공간 활용률 우선</option>
+            <option value="weight">중량 균형 우선</option>
+            <option value="sequence">입력 순서 우선</option>
+          </select>
+        </label>
+      </aside>
+
+      <section class="result-panel">
+        <div class="result-header">
+          <div><span class="result-kicker">LOADING VIEW</span><h2>3D 적재 시뮬레이션</h2></div>
+          <div class="result-tools"><div class="view-actions"><button id="viewIso" class="active">3D</button><button id="viewTop">상면</button><button id="resetView" aria-label="보기 초기화">↻</button></div><div class="container-tabs" id="containerTabs" aria-label="컨테이너별 적재 결과"></div></div>
+        </div>
+
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="loadingCanvas" aria-label="컨테이너 적재 3D 시각화"></canvas>
+          <div id="threeMount" aria-label="WebGL 컨테이너 적재 3D 시각화"></div>
+          <div class="empty-state" id="emptyState">
+            <div class="empty-cube"><i></i><i></i><i></i></div>
+            <strong>시뮬레이션을 시작해 보세요</strong>
+            <span>제품을 추가한 후 실행 버튼을 누르면<br>최적의 적재 배치를 보여드립니다.</span>
+          </div>
+          <div class="canvas-hint" id="canvasHint">드래그하여 회전 · 휠로 확대/축소</div>
+          <div class="axis-legend"><span><b>X</b> 문에서 안쪽</span><span><b>Y</b> 좌측에서 우측</span><span><b>Z</b> 바닥에서 위</span></div>
+          <div class="playback" id="playback">
+            <button id="prevStep" aria-label="이전 제품">‹</button><button id="playSteps" aria-label="자동 재생">▶</button><button id="nextStep" aria-label="다음 제품">›</button>
+            <span><strong id="currentStep">0</strong> / <span id="totalSteps">0</span></span>
+            <input id="stepRange" type="range" min="0" max="0" value="0" aria-label="적재 단계">
+          </div>
+        </div>
+
+        <div class="recommendation" id="recommendation" hidden></div>
+
+        <div class="stats" id="stats">
+          <div><span>공간 활용률</span><strong id="volumeRate">—</strong><div class="meter"><i id="volumeBar"></i></div></div>
+          <div><span>중량 활용률</span><strong id="weightRate">—</strong><div class="meter"><i id="weightBar"></i></div></div>
+          <div><span>적재 수량</span><strong id="loadedCount">—</strong><small id="loadedDetail">시뮬레이션 전</small></div>
+          <div><span>총 적재 중량</span><strong id="totalWeight">—</strong><small id="weightDetail">허용 중량 —</small></div>
+        </div>
+
+        <div class="loading-plan">
+          <div class="plan-head"><div><span class="result-kicker">LOAD SEQUENCE</span><h2>적재 순서</h2><p class="coordinate-note">위치: 문·좌측·바닥을 기준으로 한 시작점 · 크기: 회전 후 실제 배치 방향</p></div><button id="exportPlan" disabled>계획 내보내기</button></div>
+          <div class="sequence-empty" id="sequenceEmpty">시뮬레이션 결과가 여기에 표시됩니다.</div>
+          <ol class="sequence-list" id="sequenceList"></ol>
+        </div>
+      </section>
+    </section>
+
+    <section class="guide" id="guide">
+      <span class="result-kicker">HOW IT WORKS</span>
+      <h2>세 단계로 완성하는 적재 계획</h2>
+      <div class="guide-grid"><article><b>01</b><h3>제품 정보 입력</h3><p>개별 등록 또는 Excel 업로드로 제품의 규격과 중량을 준비합니다.</p></article><article><b>02</b><h3>조건 설정</h3><p>컨테이너 규격과 공간·중량·순서 중 최적화 기준을 선택합니다.</p></article><article><b>03</b><h3>3D 계획 확인</h3><p>배치 위치와 적재 순서를 확인하고 현장용 CSV로 내려받습니다.</p></article></div>
+    </section>
+  </main>
+
+  <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><small>© 2026 LoadSpace</small></footer>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="vendor/three.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

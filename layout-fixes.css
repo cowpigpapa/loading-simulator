@@ -1,0 +1,9 @@
+#planner {
+  scroll-margin-top: 104px;
+}
+
+@media (max-width: 760px) {
+  #planner {
+    scroll-margin-top: 80px;
+  }
+}
