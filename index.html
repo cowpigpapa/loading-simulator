@@ -72,9 +72,8 @@
         <div class="container-spec" id="containerSpec"></div>
         <div class="optimization-row"><label class="priority-label">최적화 기준
           <select id="optimization">
-            <option value="volume">최대 적재 우선 · 안전 제한 최소화</option>
-            <option value="sequence">안전 적재 우선 · 전도 위험 최소화</option>
-            <option value="weight">중량 균형 우선 · 무게 중심 고려</option>
+            <option value="sequence">1. 안전 적재 · 가로 공백과 전도 위험 최소화</option>
+            <option value="volume">2. 최대 적재 · 안전 조건 내 2단 적재 활용</option>
           </select>
         </label><button class="top-simulate" id="recalculateOptions" type="button" disabled>시뮬레이션 실행 <b>→</b></button></div>
       </aside>
@@ -123,13 +122,13 @@
     <section class="guide" id="guide">
       <span class="result-kicker">HOW IT WORKS</span>
       <h2>세 단계로 완성하는 적재 계획</h2>
-      <div class="guide-grid"><article><b>01</b><h3>제품 정보 입력</h3><p>개별 등록 또는 Excel 업로드로 제품의 규격과 중량을 준비합니다.</p></article><article><b>02</b><h3>조건 설정</h3><p>컨테이너 규격과 공간·중량·순서 중 최적화 기준을 선택합니다.</p></article><article><b>03</b><h3>3D 계획 확인</h3><p>배치 위치와 적재 순서를 확인하고 현장용 Excel 계획으로 내려받습니다.</p></article></div>
+      <div class="guide-grid"><article><b>01</b><h3>제품 정보 입력</h3><p>개별 등록 또는 Excel 업로드로 제품의 규격과 중량을 준비합니다.</p></article><article><b>02</b><h3>조건 설정</h3><p>컨테이너 규격과 안전 적재·최대 적재 중 최적화 기준을 선택합니다.</p></article><article><b>03</b><h3>3D 계획 확인</h3><p>배치 위치와 적재 순서를 확인하고 현장용 Excel 계획으로 내려받습니다.</p></article></div>
     </section>
   </main>
 
   <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><small>© 2026 LoadSpace</small></footer>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="vendor/three.min.js?v=0.160.0"></script>
-  <script src="app.js?v=20260728-18"></script>
+  <script src="app.js?v=20260728-19"></script>
 </body>
 </html>
