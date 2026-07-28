@@ -96,6 +96,7 @@ function compactPlacementScore(s,d,placed,c,item,priority){
 function cargoStabilityRisk(item){const base=Math.max(1,Math.min(item.l,item.w)),slender=item.h/base;return(item.shape==='cylinder'?2:0)+(slender>1.15?1:0)+(item.h>=1200?1:0)}
 function sortUnitsForPacking(units,priority){if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);else units.sort((a,b)=>cargoStabilityRisk(b)-cargoStabilityRisk(a)||b.h-a.h||b.volume-a.volume||b.weight-a.weight)}
 function unsafeElevatedPlacement(item,d,s){if(s.z===0)return false;const slender=d[2]/Math.max(1,Math.min(d[0],d[1]));return item.shape==='cylinder'||slender>1.15}
+function placementCollides(s,d,placed){const [l,w,h]=d;return placed.some(p=>s.x<p.x+p.l&&s.x+l>p.x&&s.y<p.y+p.w&&s.y+w>p.y&&s.z<p.z+p.h&&s.z+h>p.z)}
 
 function simulate(){
   if(!products.length){alert('먼저 제품을 하나 이상 추가해 주세요.');return}
@@ -107,11 +108,11 @@ function simulate(){
   for(const item of units){
     if(totalWeight+item.weight>c.maxWeight){rejected.push({...item,reason:'중량 초과'});continue}
     const rotations=allowedRotations(item);let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of rotations){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
+    for(let si=0;si<spaces.length;si++)for(const d of rotations){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
     if(!best){rejected.push({...item,reason:'공간 부족'});continue}
     const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h,order:placed.length+1});totalWeight+=item.weight;
     // guillotine subdivision: right, back, above. Small unusable spaces are pruned.
-    const next=[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}];
+    const next=[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}];
     next.filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
   }
   const productVolume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0), containerVolume=c.l*c.w*c.h;
@@ -129,7 +130,7 @@ function simulate(){
 function packAdditional(c,units,priority){
   units=[...units];sortUnitsForPacking(units,priority);
   const placed=[],rejected=[];let totalWeight=0;const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}];
-  for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
+  for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
   shiftCargoInside(placed,c);placed.sort((a,b)=>b.x-a.x||a.z-b.z||a.y-b.y).forEach((p,i)=>p.order=i+1);const volume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0);return{container:c,placed,rejected,totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:totalWeight/c.maxWeight*100};
 }
 function shiftCargoInside(placed,c){if(!placed.length)return;placed.forEach(p=>p.x=c.l-(p.x+p.l))}
@@ -173,9 +174,9 @@ function testContainer(c,priority){
   const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}],placed=[];let loaded=0,weight=0;
   for(const item of units){
     if(weight+item.weight>c.maxWeight)continue;let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
+    for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
     if(!best)continue;const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;loaded++;weight+=item.weight;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});
-    [{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
+    [{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
   }return{loaded,total:units.length};
 }
 function recommendContainer(currentKey,priority){
