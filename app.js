@@ -112,7 +112,19 @@ function packAdditional(c,units,priority){
 }
 function buildSecuringPlan(load){
   const dunnage=[],airbags=[],floorItems=load.placed.filter(p=>p.z===0),c=load.container;
-  if($('useDunnage').checked)floorItems.forEach(p=>{const length=Math.min(90,Math.max(50,p.l*.08));[.25,.75].forEach(r=>dunnage.push({type:'dunnage',x:p.x+p.l*r-length/2,y:p.y,z:0,l:length,w:p.w,h:45,product:p.name}))});
+  if($('useDunnage').checked&&floorItems.length){
+    const overlap=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0)>40;
+    const exposed=(p,axis,side)=>!floorItems.some(q=>q!==p&&(axis==='x'?overlap(p.y,p.y+p.w,q.y,q.y+q.w):overlap(p.x,p.x+p.l,q.x,q.x+q.l))&&(axis==='x'?(side==='min'?q.x+q.l<=p.x:q.x>=p.x+p.l):(side==='min'?q.y+q.w<=p.y:q.y>=p.y+p.w)));
+    const addEdge=(axis,side,location)=>{
+      const gap=p=>axis==='x'?(side==='min'?p.x:c.l-p.x-p.l):(side==='min'?p.y:c.w-p.y-p.w);
+      floorItems.filter(p=>exposed(p,axis,side)&&gap(p)>=60).sort((a,b)=>gap(a)-gap(b)).slice(0,3).forEach(p=>{
+        const g=gap(p);
+        if(axis==='x'){const l=Math.min(180,Math.max(65,g-12)),w=Math.min(240,p.w*.42),x=side==='min'?p.x-l-6:p.x+p.l+6;dunnage.push({type:'dunnage',axis,side,x:Math.max(0,Math.min(c.l-l,x)),y:p.y+(p.w-w)/2,z:0,l,w,h:125,product:p.name,location})}
+        else{const w=Math.min(180,Math.max(65,g-12)),l=Math.min(240,p.l*.42),y=side==='min'?p.y-w-6:p.y+p.w+6;dunnage.push({type:'dunnage',axis,side,x:p.x+(p.l-l)/2,y:Math.max(0,Math.min(c.w-w,y)),z:0,l,w,h:125,product:p.name,location})}
+      });
+    };
+    addEdge('x','min','문쪽 외곽');addEdge('x','max','안쪽 외곽');addEdge('y','min','좌측 외곽');addEdge('y','max','우측 외곽');
+  }
   if($('useAirbags').checked){
     const candidates=[];
     floorItems.forEach(p=>{const left=p.y,right=c.w-(p.y+p.w),length=Math.min(700,p.l*.6),x=p.x+(p.l-length)/2,height=Math.min(1200,p.h*.72);if(left>=120&&left<=600)candidates.push({type:'airbag',x,y:0,z:Math.max(20,p.h*.14),l:length,w:left,h:height,location:'좌측 벽 간극',product:p.name});if(right>=120&&right<=600)candidates.push({type:'airbag',x,y:p.y+p.w,z:Math.max(20,p.h*.14),l:length,w:right,h:height,location:'우측 벽 간극',product:p.name})});
@@ -156,7 +168,7 @@ function renderRecommendation(){
   const el=$('recommendation');if(!shipment||shipment.containers.length===1&&!shipment.unallocated.length){el.hidden=true;el.innerHTML='';return}el.hidden=false;const c=result.container,count=shipment.containers.length,left=shipment.unallocated.length;
   el.innerHTML=`<div><strong>${c.name} ${count}대로 분할 적재합니다.</strong><p>3D 화면 위의 좌우 화살표와 번호를 이용해 각 컨테이너의 배치와 적재 순서를 확인하세요.${left?` 규격상 적재할 수 없는 화물 ${left}개는 별도 검토가 필요합니다.`:''}</p></div>`;
 }
-function renderSecuringRecommendation(){const el=$('securingRecommendation'),plan=result.securing;if(!plan||(!plan.dunnage.length&&!plan.airbags.length)){el.hidden=true;el.innerHTML='';return}el.hidden=false;const items=[...plan.dunnage.slice(0,4).map((d,i)=>`<div><strong>부목 ${i+1} · ${esc(d.product)}</strong>X ${(d.x/1000).toFixed(2)}m · Y ${(d.y/1000).toFixed(2)}m · 폭 ${(d.w/1000).toFixed(2)}m</div>`),...plan.airbags.slice(0,8).map((a,i)=>`<div><strong>에어백 ${i+1} · ${a.location}</strong>X ${(a.x/1000).toFixed(2)}m · Y ${(a.y/1000).toFixed(2)}m · Z ${(a.z/1000).toFixed(2)}m</div>`)];el.innerHTML=`<h3>컨테이너 ${result.containerNumber} 화물 고정재 추천</h3><p>하부 부목 ${plan.dunnage.length}개 · 고정용 에어백 ${plan.airbags.length}개${plan.dunnage.length>4||plan.airbags.length>8?' · 대표 위치만 표시':''}. 실제 설치 전 화물 강도와 제조사 지침을 확인하세요.</p><div class="securing-items">${items.join('')}</div>`}
+function renderSecuringRecommendation(){const el=$('securingRecommendation'),plan=result.securing;if(!plan||(!plan.dunnage.length&&!plan.airbags.length)){el.hidden=true;el.innerHTML='';return}el.hidden=false;const items=[...plan.dunnage.slice(0,6).map((d,i)=>`<div><strong>고정 부목 ${i+1} · ${d.location}</strong>${esc(d.product)} 외곽 · X ${(d.x/1000).toFixed(2)}m · Y ${(d.y/1000).toFixed(2)}m</div>`),...plan.airbags.slice(0,8).map((a,i)=>`<div><strong>에어백 ${i+1} · ${a.location}</strong>X ${(a.x/1000).toFixed(2)}m · Y ${(a.y/1000).toFixed(2)}m · Z ${(a.z/1000).toFixed(2)}m</div>`)];el.innerHTML=`<h3>컨테이너 ${result.containerNumber} 화물 고정재 추천</h3><p>외곽 고정 부목 ${plan.dunnage.length}개 · 고정용 에어백 ${plan.airbags.length}개${plan.dunnage.length>6||plan.airbags.length>8?' · 대표 위치만 표시':''}. 벽에 밀착된 면은 부목 추천에서 제외했습니다. 실제 설치 전 바닥 못 고정 허용 여부와 제조사 지침을 확인하세요.</p><div class="securing-items">${items.join('')}</div>`}
 function setStep(step){if(!result)return;visibleStep=Math.max(0,Math.min(result.placed.length,step));$('currentStep').textContent=visibleStep;$('stepRange').value=visibleStep;$('prevStep').disabled=visibleStep===0;$('nextStep').disabled=visibleStep===result.placed.length;draw()}
 function togglePlayback(){if(playTimer){stopPlayback();return}if(visibleStep>=result.placed.length)setStep(0);$('playSteps').textContent='Ⅱ';playTimer=setInterval(()=>{if(visibleStep>=result.placed.length){stopPlayback();return}setStep(visibleStep+1)},650)}
 function stopPlayback(){if(playTimer)clearInterval(playTimer);playTimer=null;if($('playSteps'))$('playSteps').textContent='▶'}
@@ -173,7 +185,27 @@ function drawThree(){
   initThree();if(!threeView)return;const {renderer,scene,camera:cam,group}=threeView,c=result.container;disposeThreeGroup();
   const visible=result.placed.slice(0,visibleStep),toColor=hex=>new THREE.Color(hex),edgeMat=new THREE.LineBasicMaterial({color:0x315e4c,transparent:true,opacity:.65});
   visible.forEach(p=>{let geometry;if(p.shape==='cylinder'){geometry=new THREE.CylinderGeometry(.5,.5,1,28);geometry.scale(p.l,p.h,p.w)}else geometry=new THREE.BoxGeometry(p.l,p.h,p.w);const material=new THREE.MeshStandardMaterial({color:toColor(p.color),roughness:.72,metalness:.03,transparent:true,opacity:.94,side:THREE.FrontSide}),mesh=new THREE.Mesh(geometry,material);mesh.position.set(p.x+p.l/2,p.z+p.h/2,p.y+p.w/2);group.add(mesh);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color:0x263b32,transparent:true,opacity:.42}));edges.position.copy(mesh.position);group.add(edges)});
-  if(visibleStep===result.placed.length&&result.securing){result.securing.dunnage.forEach(d=>{const geometry=new THREE.BoxGeometry(d.l,d.h,d.w),mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x9a632f,roughness:.9}));mesh.position.set(d.x+d.l/2,d.h/2+3,d.y+d.w/2);group.add(mesh)});result.securing.airbags.forEach(a=>{const geometry=new THREE.BoxGeometry(a.l,a.h,a.w),material=new THREE.MeshStandardMaterial({color:0x58a9dc,transparent:true,opacity:.55,roughness:.35}),mesh=new THREE.Mesh(geometry,material);mesh.position.set(a.x+a.l/2,a.z+a.h/2,a.y+a.w/2);group.add(mesh);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color:0x1e678f,transparent:true,opacity:.7}));edges.position.copy(mesh.position);group.add(edges)})}
+  if(visibleStep===result.placed.length&&result.securing){
+    const woodMaterial=new THREE.MeshStandardMaterial({color:0xa56a32,roughness:.88}),nailMaterial=new THREE.MeshStandardMaterial({color:0x383d42,metalness:.65,roughness:.38});
+    result.securing.dunnage.forEach(d=>{
+      const dx=d.l,dz=d.w,h=d.h,isX=d.axis==='x',highAtMax=d.side==='min',positions=isX
+        ?[0,0,0, dx,0,0, dx,0,dz, 0,0,dz, highAtMax?dx:0,h,0, highAtMax?dx:0,h,dz]
+        :[0,0,0, dx,0,0, dx,0,dz, 0,0,dz, 0,h,highAtMax?dz:0, dx,h,highAtMax?dz:0],
+        indices=highAtMax
+          ?(isX?[0,2,1,0,3,2,1,2,5,1,5,4,0,4,5,0,5,3,0,1,4,3,5,2]:[0,2,1,0,3,2,3,5,2,3,4,5,0,1,5,0,5,4,0,4,3,1,2,5])
+          :(isX?[0,2,1,0,3,2,0,4,5,0,5,3,1,2,5,1,5,4,0,1,4,3,5,2]:[0,2,1,0,3,2,0,1,5,0,5,4,3,4,5,3,5,2,0,4,3,1,2,5]);
+      const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setIndex(indices);geometry.computeVertexNormals();
+      const mesh=new THREE.Mesh(geometry,woodMaterial);mesh.position.set(d.x,4,d.y);group.add(mesh);
+      const nailGeometry=new THREE.CylinderGeometry(12,12,8,14);
+      [0.3,0.7].forEach(t=>{const nail=new THREE.Mesh(nailGeometry,nailMaterial);nail.position.set(d.x+(isX?(highAtMax?.2:.8)*dx:t*dx),10,d.y+(isX?t*dz:(highAtMax?.2:.8)*dz));group.add(nail)});
+    });
+    result.securing.airbags.forEach(a=>{
+      const material=new THREE.MeshStandardMaterial({color:0x70bde9,transparent:true,opacity:.74,roughness:.58}),geometry=new THREE.SphereGeometry(.5,28,18),mesh=new THREE.Mesh(geometry,material);
+      mesh.scale.set(a.l*.94,a.h,a.w*.94);mesh.position.set(a.x+a.l/2,a.z+a.h/2,a.y+a.w/2);group.add(mesh);
+      const seam=new THREE.Mesh(new THREE.TorusGeometry(.5,0.018,8,36),new THREE.MeshStandardMaterial({color:0xd7effb,transparent:true,opacity:.8,roughness:.65}));seam.scale.set(a.l*.96,a.w*.96,1);seam.rotation.x=Math.PI/2;seam.position.set(a.x+a.l/2,a.z+a.h/2,a.y+a.w/2);group.add(seam);
+      const valve=new THREE.Mesh(new THREE.CylinderGeometry(17,21,28,12),new THREE.MeshStandardMaterial({color:0x276e96,roughness:.48}));valve.position.set(a.x+a.l/2,a.z+a.h+8,a.y+a.w/2);group.add(valve);
+    })
+  }
   const frameGeo=new THREE.BoxGeometry(c.l,c.h,c.w),frame=new THREE.LineSegments(new THREE.EdgesGeometry(frameGeo),edgeMat);frame.position.set(c.l/2,c.h/2,c.w/2);group.add(frame);
   const floorGeo=new THREE.PlaneGeometry(c.l,c.w),floor=new THREE.Mesh(floorGeo,new THREE.MeshStandardMaterial({color:0xdfe9e2,transparent:true,opacity:.22,side:THREE.DoubleSide}));floor.rotation.x=-Math.PI/2;floor.position.set(c.l/2,0,c.w/2);group.add(floor);
   const target=new THREE.Vector3(c.l/2,c.h*.42,c.w/2),distance=Math.max(c.l,c.w*2.5,c.h*2.5)*1.25/camera.zoom;
