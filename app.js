@@ -68,7 +68,7 @@ function renderProducts(){
   document.querySelectorAll('[data-fragile]').forEach(input=>input.onchange=()=>{products[+input.dataset.fragile].fragile=input.checked;markSimulationChanged()});
 }
 function changeProductQty(index,delta){if(!products[index])return;products[index].qty=Math.max(1,products[index].qty+delta);renderProducts();markSimulationChanged()}
-function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>';$('recalculateList').classList.add('needs-update')}
+function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>';$('recalculateList').classList.add('needs-update');$('recalculateList').innerHTML='다시 계산 <b>→</b>'}
 function updateContainerSpec(){const c=CONTAINERS[$('containerType').value]||CONTAINERS['20ft'];$('containerSpec').innerHTML=`<div><span>내부 길이</span><strong>${(c.l/1000).toFixed(2)} m</strong></div><div><span>내부 폭 / 높이</span><strong>${(c.w/1000).toFixed(2)} / ${(c.h/1000).toFixed(2)} m</strong></div><div><span>최대 적재</span><strong>${(c.maxWeight/1000).toFixed(1)} t</strong></div>`}
 
 function simulate(){
@@ -97,7 +97,7 @@ function simulate(){
   shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};
   result=loads[0];activeContainer=0;
   visibleStep=placed.length;stopPlayback();
-  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');updateResults();resizeCanvas();draw();
+  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();
 }
 function packAdditional(c,units,priority){
   units=[...units];if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);
