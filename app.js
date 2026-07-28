@@ -16,12 +16,13 @@ let playTimer = null;
 let threeView = null;
 let showDunnage = true;
 let showAirbags = true;
+let simulationRunning = false;
 const widthGapCache = new Map();
 const $ = id => document.getElementById(id);
 
 function init(){
   $('containerType').innerHTML = Object.entries(CONTAINERS).map(([k,c])=>`<option value="${k}">${c.name}</option>`).join('');
-  bindEvents(); updateContainerSpec(); renderProducts(); resizeCanvas();
+  bindEvents(); updateContainerSpec(); renderProducts(); resizeCanvas(); trackVisitors();
 }
 function bindEvents(){
   document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>switchTab(tab.dataset.tab));
@@ -126,19 +127,10 @@ function finalizePacking(c,raw){const placed=raw.placed.map(p=>({...p}));shiftCa
 function packingDepth(raw){return raw.placed.reduce((m,p)=>Math.max(m,p.x+p.l),0)}
 function packPlan(c,units,priority){const safe=packExtremeRaw(c,units,'sequence');if(priority==='sequence')return finalizePacking(c,safe);const expanded=packExtremeRaw(c,safe.rejected,'volume',safe.placed,safe.totalWeight),dense=packExtremeRaw(c,units,'volume'),best=[safe,expanded,dense].sort((a,b)=>b.placed.length-a.placed.length||packingDepth(a)-packingDepth(b))[0];return finalizePacking(c,best)}
 
-function simulate(){
+async function simulate(){
   if(!products.length){alert('먼저 제품을 하나 이상 추가해 주세요.');return}
-  const c=CONTAINERS[$('containerType').value], priority=$('optimization').value;
-  let units=products.flatMap((p,pi)=>Array.from({length:p.qty},(_,n)=>({...p,pi,unit:n+1,volume:p.l*p.w*p.h})));
-  result=packPlan(c,units,priority);const placed=result.placed,rejected=result.rejected;
-  const loads=[result];let remaining=rejected;
-  while(remaining.length&&loads.length<50){const next=packAdditional(c,remaining,priority);if(!next.placed.length)break;loads.push(next);remaining=next.rejected}
-  loads.forEach((load,i)=>load.containerNumber=i+1);
-  loads.forEach(load=>load.securing=buildSecuringPlan(load));
-  shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};
-  result=loads[0];activeContainer=0;
-  visibleStep=placed.length;stopPlayback();
-  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateOptions').classList.remove('needs-update');$('recalculateOptions').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();
+  if(simulationRunning)return;simulationRunning=true;const started=performance.now(),status=$('simulationStatus'),buttons=[$('simulate'),$('recalculateList'),$('recalculateOptions')];buttons.forEach(b=>b.disabled=true);status.hidden=false;status.className='simulation-status busy';status.innerHTML='<i></i><span>최적 배치 계산 중 · 예상 1~5초</span>';await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,30)));
+  try{const c=CONTAINERS[$('containerType').value], priority=$('optimization').value;let units=products.flatMap((p,pi)=>Array.from({length:p.qty},(_,n)=>({...p,pi,unit:n+1,volume:p.l*p.w*p.h})));result=packPlan(c,units,priority);const placed=result.placed,rejected=result.rejected;const loads=[result];let remaining=rejected;while(remaining.length&&loads.length<50){const next=packAdditional(c,remaining,priority);if(!next.placed.length)break;loads.push(next);remaining=next.rejected}loads.forEach((load,i)=>load.containerNumber=i+1);loads.forEach(load=>load.securing=buildSecuringPlan(load));shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};result=loads[0];activeContainer=0;visibleStep=placed.length;stopPlayback();$('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateOptions').classList.remove('needs-update');$('recalculateOptions').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();status.className='simulation-status done';status.innerHTML=`<i></i><span>계산 완료 · ${((performance.now()-started)/1000).toFixed(2)}초</span>`}catch(error){console.error(error);status.className='simulation-status error';status.innerHTML='<i></i><span>계산 중 오류가 발생했습니다</span>';alert('시뮬레이션 계산 중 오류가 발생했습니다.')}finally{simulationRunning=false;buttons[0].disabled=!products.length;buttons[1].disabled=!products.length;buttons[2].disabled=!products.length}
 }
 function packAdditional(c,units,priority){
   return packPlan(c,units,priority);
@@ -148,18 +140,12 @@ function orderPlacementsForLoading(placed){const remaining=[...placed],ordered=[
 function buildSecuringPlan(load){
   const dunnage=[],airbags=[],floorItems=load.placed.filter(p=>p.z===0),c=load.container;
   const doorGap=floorItems.length?Math.min(...floorItems.map(p=>p.x)):0;
-  if(floorItems.length){
-    const overlap=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0)>40;
-    const exposed=(p,axis,side)=>!floorItems.some(q=>q!==p&&(axis==='x'?overlap(p.y,p.y+p.w,q.y,q.y+q.w):overlap(p.x,p.x+p.l,q.x,q.x+q.l))&&(axis==='x'?(side==='min'?q.x+q.l<=p.x:q.x>=p.x+p.l):(side==='min'?q.y+q.w<=p.y:q.y>=p.y+p.w)));
-    const addEdge=(axis,side,location)=>{
-      const gap=p=>axis==='x'?(side==='min'?p.x:c.l-p.x-p.l):(side==='min'?p.y:c.w-p.y-p.w);
-      floorItems.filter(p=>exposed(p,axis,side)&&gap(p)>=60).sort((a,b)=>gap(a)-gap(b)).slice(0,3).forEach(p=>{
-        const g=gap(p);
-        if(axis==='x'){const l=Math.min(180,Math.max(65,g-12)),w=Math.min(240,p.w*.42),x=side==='min'?p.x-l-6:p.x+p.l+6;dunnage.push({type:'dunnage',axis,side,x:Math.max(0,Math.min(c.l-l,x)),y:p.y+(p.w-w)/2,z:0,l,w,h:125,product:p.name,location})}
-        else{const w=Math.min(180,Math.max(65,g-12)),l=Math.min(240,p.l*.42),y=side==='min'?p.y-w-6:p.y+p.w+6;dunnage.push({type:'dunnage',axis,side,x:p.x+(p.l-l)/2,y:Math.max(0,Math.min(c.w-w,y)),z:0,l,w,h:125,product:p.name,location})}
-      });
-    };
-    addEdge('x','min','문쪽 최외곽 하단');
+  if(floorItems.length&&doorGap>=60){
+    const overlap=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0)>40,front=floorItems.filter(p=>!floorItems.some(q=>q!==p&&q.x+q.l<=p.x+2&&overlap(p.y,p.y+p.w,q.y,q.y+q.w)));
+    const y0=Math.max(0,Math.min(...front.map(p=>p.y))),y1=Math.min(c.w,Math.max(...front.map(p=>p.y+p.w))),span=Math.max(300,y1-y0),beamL=Math.min(100,Math.max(65,doorGap-18)),beamX=Math.max(0,doorGap-beamL-8);
+    dunnage.push({type:'dunnage',kind:'beam',axis:'x',side:'min',x:beamX,y:y0,z:0,l:beamL,w:span,h:95,product:'문쪽 노출 화물 전체',location:'문쪽 전면 가로 각재'});
+    const count=Math.max(3,Math.min(6,Math.ceil(span/420))),chockL=Math.min(180,Math.max(75,beamX-8));
+    for(let i=0;i<count;i++){const center=y0+span*(i+.5)/count,w=Math.min(150,span/count*.55);dunnage.push({type:'dunnage',kind:'chock',axis:'x',side:'min',x:Math.max(0,beamX-chockL-5),y:Math.max(0,Math.min(c.w-w,center-w/2)),z:0,l:chockL,w,h:125,product:'문쪽 노출 화물 전체',location:`가로 각재 지지 부목 ${i+1}/${count}`})}
   }
   {
     const candidates=[];
@@ -203,7 +189,7 @@ function renderRecommendation(){
   const el=$('recommendation');if(!shipment||shipment.containers.length===1&&!shipment.unallocated.length){el.hidden=true;el.innerHTML='';return}el.hidden=false;const c=result.container,count=shipment.containers.length,left=shipment.unallocated.length;
   el.innerHTML=`<div><strong>${c.name} ${count}대로 분할 적재합니다.</strong><p>3D 화면 위의 좌우 화살표와 번호를 이용해 각 컨테이너의 배치와 적재 순서를 확인하세요.${left?` 규격상 적재할 수 없는 화물 ${left}개는 별도 검토가 필요합니다.`:''}</p></div>`;
 }
-function renderSecuringRecommendation(){const el=$('securingRecommendation'),plan=result.securing;if(!plan||(!plan.dunnage.length&&!plan.airbags.length)){el.hidden=true;el.innerHTML='';return}el.hidden=false;const items=[...plan.dunnage.slice(0,6).map((d,i)=>`<div><strong>문쪽 고정 부목 ${i+1} · ${d.location}</strong>${esc(d.product)} 하단 · X ${(d.x/1000).toFixed(2)}m · Y ${(d.y/1000).toFixed(2)}m</div>`),...plan.airbags.slice(0,8).map((a,i)=>`<div><strong>에어백 ${i+1} · ${a.location}</strong>X ${(a.x/1000).toFixed(2)}m · Y ${(a.y/1000).toFixed(2)}m · Z ${(a.z/1000).toFixed(2)}m</div>`)];el.innerHTML=`<h3>컨테이너 ${result.containerNumber} 화물 고정재 추천</h3><p>문쪽 마지막 화물 하단 부목 ${plan.dunnage.length}개 · 벽면 및 화물 사이 에어백 ${plan.airbags.length}개${plan.dunnage.length>6||plan.airbags.length>8?' · 대표 위치만 표시':''}. 화물은 안쪽 벽부터 배치하고 문쪽 여유 공간은 마지막 화물 하단 부목으로 고정합니다. 좌·우 벽면 또는 화물 열 사이에 남는 간극은 에어백으로 고정합니다. 실제 설치 전 바닥 못 고정 허용 여부와 제조사 지침을 확인하세요.</p><div class="securing-items">${items.join('')}</div>`}
+function renderSecuringRecommendation(){const el=$('securingRecommendation'),plan=result.securing;if(!plan||(!plan.dunnage.length&&!plan.airbags.length)){el.hidden=true;el.innerHTML='';return}el.hidden=false;const beam=plan.dunnage.find(d=>d.kind==='beam'),chocks=plan.dunnage.filter(d=>d.kind!=='beam'),items=[...(beam?[`<div><strong>문쪽 전면 가로 각재</strong>노출 화물 폭 ${(beam.w/1000).toFixed(2)}m 전체 지지</div>`]:[]),...chocks.map((d,i)=>`<div><strong>각재 지지 부목 ${i+1}/${chocks.length}</strong>Y ${(d.y/1000).toFixed(2)}m · 바닥 못 고정</div>`),...plan.airbags.slice(0,8).map((a,i)=>`<div><strong>에어백 ${i+1} · ${a.location}</strong>X ${(a.x/1000).toFixed(2)}m · Y ${(a.y/1000).toFixed(2)}m · Z ${(a.z/1000).toFixed(2)}m</div>`)];el.innerHTML=`<h3>컨테이너 ${result.containerNumber} 화물 고정재 추천</h3><p>${beam?`문쪽 노출 폭 전체에 가로 각재 1개와 균등 분산 부목 ${chocks.length}개`: '문쪽 추가 목재 고정 불필요'} · 벽면 및 화물 사이 에어백 ${plan.airbags.length}개. 넓은 화물 전면은 각재로 하중을 분산하고 부목을 바닥에 고정합니다. 실제 설치 전 컨테이너 바닥 못 고정 허용 여부와 제조사 지침을 확인하세요.</p><div class="securing-items">${items.join('')}</div>`}
 function setStep(step){if(!result)return;visibleStep=Math.max(0,Math.min(result.placed.length,step));$('currentStep').textContent=visibleStep;$('stepRange').value=visibleStep;$('prevStep').disabled=visibleStep===0;$('nextStep').disabled=visibleStep===result.placed.length;draw()}
 function togglePlayback(){if(playTimer){stopPlayback();return}if(visibleStep>=result.placed.length)setStep(0);$('playSteps').textContent='Ⅱ';playTimer=setInterval(()=>{if(visibleStep>=result.placed.length){stopPlayback();return}setStep(visibleStep+1)},650)}
 function stopPlayback(){if(playTimer)clearInterval(playTimer);playTimer=null;if($('playSteps'))$('playSteps').textContent='▶'}
@@ -223,6 +209,7 @@ function drawThree(){
   if(visibleStep===result.placed.length&&result.securing){
     const woodMaterial=new THREE.MeshStandardMaterial({color:0xa56a32,roughness:.88}),nailMaterial=new THREE.MeshStandardMaterial({color:0x383d42,metalness:.65,roughness:.38});
     if(showDunnage)result.securing.dunnage.forEach(d=>{
+      if(d.kind==='beam'){const geometry=new THREE.BoxGeometry(d.l,d.h,d.w),mesh=new THREE.Mesh(geometry,woodMaterial);mesh.position.set(d.x+d.l/2,d.h/2,d.y+d.w/2);group.add(mesh);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color:0x62401f,transparent:true,opacity:.7}));edges.position.copy(mesh.position);group.add(edges);return}
       const dx=d.l,dz=d.w,h=d.h,isX=d.axis==='x',highAtMax=d.side==='min',positions=isX
         ?[0,0,0, dx,0,0, dx,0,dz, 0,0,dz, highAtMax?dx:0,h,0, highAtMax?dx:0,h,dz]
         :[0,0,0, dx,0,0, dx,0,dz, 0,0,dz, 0,h,highAtMax?dz:0, dx,h,highAtMax?dz:0],
@@ -278,7 +265,7 @@ function exportPlan(){
   loads.forEach((load,i)=>{
     summary.push({'컨테이너 번호':i+1,'컨테이너 규격':load.container.name,'적재 수량':load.placed.length,'총 중량(kg)':load.totalWeight,'공간 활용률(%)':Number(load.volumeRate.toFixed(1)),'중량 활용률(%)':Number(load.weightRate.toFixed(1))});
     load.placed.forEach(p=>plan.push({'컨테이너 번호':i+1,'컨테이너 규격':load.container.name,'적재 순서':p.order,'제품명':p.name,'제품군':p.group,'제품 번호':p.unit,'제품 형상':p.shape==='cylinder'?'원통형':'박스형','문에서 안쪽 X(mm)':p.x,'좌측에서 우측 Y(mm)':p.y,'바닥에서 위 Z(mm)':p.z,'배치 길이(mm)':p.l,'배치 너비(mm)':p.w,'배치 높이(mm)':p.h,'개당 중량(kg)':p.weight}));
-    const fixed=[...(load.securing?.dunnage||[]),...(load.securing?.airbags||[])];fixed.forEach((f,n)=>securing.push({'컨테이너 번호':i+1,'번호':n+1,'고정재':f.type==='dunnage'?'부목':'에어백','추천 위치':f.location||'화물 간극','관련 제품':f.product||'','X(mm)':Math.round(f.x),'Y(mm)':Math.round(f.y),'Z(mm)':Math.round(f.z),'길이(mm)':Math.round(f.l),'너비(mm)':Math.round(f.w),'높이(mm)':Math.round(f.h)}));
+    const fixed=[...(load.securing?.dunnage||[]),...(load.securing?.airbags||[])];fixed.forEach((f,n)=>securing.push({'컨테이너 번호':i+1,'번호':n+1,'고정재':f.type==='dunnage'?(f.kind==='beam'?'가로 각재':'부목'):'에어백','추천 위치':f.location||'화물 간극','관련 제품':f.product||'','X(mm)':Math.round(f.x),'Y(mm)':Math.round(f.y),'Z(mm)':Math.round(f.z),'길이(mm)':Math.round(f.l),'너비(mm)':Math.round(f.w),'높이(mm)':Math.round(f.h)}));
   });
   const productRows=products.map(p=>({'제품명':p.name,'제품군':p.group,'제품 형상':p.shape==='cylinder'?'원통형':'박스형','수량':p.qty,'길이(mm)':p.l,'너비(mm)':p.w,'높이(mm)':p.h,'개당 중량(kg)':p.weight,'눕힘 허용':p.rotate?'예':'아니오','상부 적재 금지':p.fragile?'예':'아니오'}));
   const wb=XLSX.utils.book_new();
@@ -286,4 +273,5 @@ function exportPlan(){
   XLSX.writeFile(wb,'loadspace-loading-plan.xlsx');
 }
 function csvCell(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function trackVisitors(){const todayEl=$('todayVisitors'),totalEl=$('totalVisitors');if(location.hostname!=='cowpigpapa.github.io'){todayEl.textContent='미리보기';totalEl.textContent='미리보기';return}const namespace='cowpigpapa-loading-simulator',date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()),base=`https://api.counterapi.dev/v1/${namespace}`,request=async(name,increment)=>{const response=await fetch(`${base}/${name}/${increment?'up':''}`,{cache:'no-store'});if(!response.ok)throw new Error('counter unavailable');const data=await response.json();return Number(data.count??data.value??0)};try{const totalKey='loadspace-total-visitor-counted',dailyKey=`loadspace-daily-${date}`,incrementTotal=!localStorage.getItem(totalKey),incrementDaily=!localStorage.getItem(dailyKey),[today,total]=await Promise.all([request(`visitors-${date}`,incrementDaily),request('visitors-total',incrementTotal)]);if(incrementTotal)localStorage.setItem(totalKey,'1');if(incrementDaily)localStorage.setItem(dailyKey,'1');todayEl.textContent=today.toLocaleString();totalEl.textContent=total.toLocaleString()}catch(error){todayEl.textContent='—';totalEl.textContent='—'}}
 init();

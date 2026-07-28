@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260728-12">
+  <link rel="stylesheet" href="styles.css?v=20260728-13">
   <link rel="stylesheet" href="layout-fixes.css?v=20260728-1">
 </head>
 <body>
@@ -81,7 +81,7 @@
       <section class="result-panel">
         <div class="result-header">
           <div><span class="result-kicker">LOADING VIEW</span><h2>3D 적재 시뮬레이션</h2></div>
-          <div class="result-tools"><div class="securing-visibility" aria-label="3D 고정재 표시"><button id="toggleDunnage" class="active dunnage-toggle" aria-pressed="true"><i></i><span>부목</span><b>ON</b></button><button id="toggleAirbags" class="active airbag-toggle" aria-pressed="true"><i></i><span>에어백</span><b>ON</b></button></div><div class="view-actions"><button id="viewIso" class="active">3D</button><button id="viewTop">상면</button><button id="resetView" aria-label="보기 초기화">↻</button></div><div class="container-tabs" id="containerTabs" aria-label="컨테이너별 적재 결과"></div></div>
+          <div class="result-tools"><div id="simulationStatus" class="simulation-status" hidden aria-live="polite"></div><div class="securing-visibility" aria-label="3D 고정재 표시"><button id="toggleDunnage" class="active dunnage-toggle" aria-pressed="true"><i></i><span>부목</span><b>ON</b></button><button id="toggleAirbags" class="active airbag-toggle" aria-pressed="true"><i></i><span>에어백</span><b>ON</b></button></div><div class="view-actions"><button id="viewIso" class="active">3D</button><button id="viewTop">상면</button><button id="resetView" aria-label="보기 초기화">↻</button></div><div class="container-tabs" id="containerTabs" aria-label="컨테이너별 적재 결과"></div></div>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
@@ -126,9 +126,9 @@
     </section>
   </main>
 
-  <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><small>© 2026 LoadSpace</small></footer>
+  <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><div class="visitor-count" aria-label="방문자 수"><span>오늘 <b id="todayVisitors">—</b></span><span>누적 <b id="totalVisitors">—</b></span></div><small>© 2026 LoadSpace</small></footer>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="vendor/three.min.js?v=0.160.0"></script>
-  <script src="app.js?v=20260728-22"></script>
+  <script src="app.js?v=20260728-23"></script>
 </body>
 </html>
