@@ -26,6 +26,7 @@ function bindEvents(){
   $('loadDemo').onclick=loadDemo;
   $('containerType').onchange=updateContainerSpec;
   $('simulate').onclick=simulate;
+  $('recalculateList').onclick=simulate;
   $('fileInput').onchange=e=>readFile(e.target.files[0]);
   $('downloadTemplate').onclick=downloadTemplate;
   $('exportPlan').onclick=exportPlan;
@@ -58,7 +59,7 @@ function loadDemo(){products=[
   {name:'필터 박스',group:'소모품',shape:'box',qty:16,l:600,w:500,h:450,weight:52,rotate:true,fragile:false}
 ].map((p,i)=>({...p,id:Date.now()+i,color:COLORS[i]}));renderProducts();simulate();document.querySelector('#planner').scrollIntoView({behavior:'smooth'})}
 function renderProducts(){
-  const total=products.reduce((s,p)=>s+p.qty,0);$('productCount').textContent=`${products.length}개 품목 · ${total}박스`;
+  const total=products.reduce((s,p)=>s+p.qty,0);$('productCount').textContent=`(${products.length}개 품목 · ${total}박스)`;$('recalculateList').disabled=!products.length;
   $('productList').innerHTML=products.length?products.map((p,i)=>`<div class="product-item"><span class="product-color" style="background:${p.color};border-radius:${p.shape==='cylinder'?'50%':'5px'}"></span><div><div class="product-title-row"><strong>${esc(p.name)}</strong><div class="qty-stepper" aria-label="${esc(p.name)} 수량"><span>수량</span><output>${p.qty}</output><span class="qty-arrows"><button type="button" data-qty-up="${i}" aria-label="수량 증가">▲</button><button type="button" data-qty-down="${i}" aria-label="수량 감소" ${p.qty<=1?'disabled':''}>▼</button></span></div></div><small>${p.group} · ${p.shape==='cylinder'?'원통형':'박스형'} · ${p.l}×${p.w}×${p.h} mm · ${p.weight} kg</small><div class="product-options"><label><input type="checkbox" data-lay="${i}" ${p.rotate?'checked':''}> 눕힘 허용</label><label><input type="checkbox" data-fragile="${i}" ${p.fragile?'checked':''}> 상부 적재 금지</label></div></div><button class="delete-product" data-delete="${i}" aria-label="${esc(p.name)} 삭제">×</button></div>`).join(''):'<div class="list-empty">아직 등록된 제품이 없습니다.</div>';
   document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{products.splice(+b.dataset.delete,1);renderProducts()});
   document.querySelectorAll('[data-qty-up]').forEach(button=>button.onclick=()=>changeProductQty(+button.dataset.qtyUp,1));
@@ -67,7 +68,7 @@ function renderProducts(){
   document.querySelectorAll('[data-fragile]').forEach(input=>input.onchange=()=>{products[+input.dataset.fragile].fragile=input.checked;markSimulationChanged()});
 }
 function changeProductQty(index,delta){if(!products[index])return;products[index].qty=Math.max(1,products[index].qty+delta);renderProducts();markSimulationChanged()}
-function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>'}
+function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>';$('recalculateList').classList.add('needs-update')}
 function updateContainerSpec(){const c=CONTAINERS[$('containerType').value]||CONTAINERS['20ft'];$('containerSpec').innerHTML=`<div><span>내부 길이</span><strong>${(c.l/1000).toFixed(2)} m</strong></div><div><span>내부 폭 / 높이</span><strong>${(c.w/1000).toFixed(2)} / ${(c.h/1000).toFixed(2)} m</strong></div><div><span>최대 적재</span><strong>${(c.maxWeight/1000).toFixed(1)} t</strong></div>`}
 
 function simulate(){
@@ -96,7 +97,7 @@ function simulate(){
   shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};
   result=loads[0];activeContainer=0;
   visibleStep=placed.length;stopPlayback();
-  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();
+  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');updateResults();resizeCanvas();draw();
 }
 function packAdditional(c,units,priority){
   units=[...units];if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);
