@@ -26,7 +26,7 @@
   <main>
     <section class="workspace" id="planner">
       <aside class="control-panel">
-        <div class="control-heading"><div class="step-heading"><span>01</span><div><h2>제품 데이터</h2><p>직접 입력하거나 파일을 업로드하세요.</p></div></div><div class="top-actions"><details class="securing-menu"><summary>고정재 옵션</summary><div><label><input id="useDunnage" type="checkbox"> 문쪽 하단 부목 추천</label><label><input id="useAirbags" type="checkbox"> 벽면·화물 사이 에어백 추천</label></div></details><button class="top-simulate" id="simulate">시뮬레이션 실행 <b>→</b></button></div></div>
+        <div class="control-heading"><div class="step-heading"><span>01</span><div><h2>제품 데이터</h2><p>직접 입력하거나 파일을 업로드하세요.</p></div></div><div class="top-actions"><button class="top-simulate" id="simulate">시뮬레이션 실행 <b>→</b></button></div></div>
 
         <div class="tabs" role="tablist">
           <button class="tab active" data-tab="manual" role="tab" aria-selected="true">직접 입력</button>
@@ -82,7 +82,7 @@
       <section class="result-panel">
         <div class="result-header">
           <div><span class="result-kicker">LOADING VIEW</span><h2>3D 적재 시뮬레이션</h2></div>
-          <div class="result-tools"><div class="view-actions"><button id="viewIso" class="active">3D</button><button id="viewTop">상면</button><button id="resetView" aria-label="보기 초기화">↻</button></div><div class="container-tabs" id="containerTabs" aria-label="컨테이너별 적재 결과"></div></div>
+          <div class="result-tools"><div class="securing-visibility" aria-label="3D 고정재 표시"><button id="toggleDunnage" class="active" aria-pressed="true">부목</button><button id="toggleAirbags" class="active" aria-pressed="true">에어백</button></div><div class="view-actions"><button id="viewIso" class="active">3D</button><button id="viewTop">상면</button><button id="resetView" aria-label="보기 초기화">↻</button></div><div class="container-tabs" id="containerTabs" aria-label="컨테이너별 적재 결과"></div></div>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
@@ -130,6 +130,6 @@
   <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><small>© 2026 LoadSpace</small></footer>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="vendor/three.min.js?v=0.160.0"></script>
-  <script src="app.js?v=20260728-6"></script>
+  <script src="app.js?v=20260728-7"></script>
 </body>
 </html>
