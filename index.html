@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260728-7">
+  <link rel="stylesheet" href="styles.css?v=20260728-8">
   <link rel="stylesheet" href="layout-fixes.css?v=20260728-1">
 </head>
 <body>
@@ -35,14 +35,14 @@
 
         <div class="tab-pane active" id="manualPane">
           <div class="form-grid">
-            <label class="wide">제품명<input id="productName" value="산업용 펌프" placeholder="예: 산업용 펌프"></label>
-            <label>제품군<input id="productGroup" value="기계류" placeholder="예: 기계류"></label>
-            <label>수량<input id="productQty" type="number" min="1" value="4"></label>
-            <label>제품 형상<select id="productShape"><option value="box">박스형</option><option value="cylinder">원통형</option></select></label>
-            <label>길이 (mm)<input id="productLength" type="number" min="1" value="1200"></label>
-            <label>너비 (mm)<input id="productWidth" type="number" min="1" value="800"></label>
-            <label>높이 (mm)<input id="productHeight" type="number" min="1" value="900"></label>
-            <label>개당 중량 (kg)<input id="productWeight" type="number" min="0.1" step="0.1" value="420"></label>
+            <label class="half">제품명<input id="productName" value="산업용 펌프" placeholder="예: 산업용 펌프"></label>
+            <label class="half">제품군<input id="productGroup" value="기계류" placeholder="예: 기계류"></label>
+            <label class="third">제품 형상<select id="productShape"><option value="box">박스형</option><option value="cylinder">원통형</option></select></label>
+            <label class="third">수량<input id="productQty" type="number" min="1" value="4"></label>
+            <label class="third">개당 중량 (kg)<input id="productWeight" type="number" min="0.1" step="0.1" value="420"></label>
+            <label class="third">길이 (mm)<input id="productLength" type="number" min="1" value="1200"></label>
+            <label class="third">너비 (mm)<input id="productWidth" type="number" min="1" value="800"></label>
+            <label class="third">높이 (mm)<input id="productHeight" type="number" min="1" value="900"></label>
           </div>
           <div class="option-row">
             <label><input id="allowRotation" type="checkbox" checked> 눕혀서 적재 가능</label>
