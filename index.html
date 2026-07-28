@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260728-11">
+  <link rel="stylesheet" href="styles.css?v=20260728-12">
   <link rel="stylesheet" href="layout-fixes.css?v=20260728-1">
 </head>
 <body>
@@ -113,7 +113,7 @@
         </div>
 
         <div class="loading-plan">
-          <div class="plan-head"><div><span class="result-kicker">LOAD SEQUENCE</span><h2>적재 순서</h2><p class="coordinate-note">위치: 문·좌측·바닥을 기준으로 한 시작점 · 크기: 회전 후 실제 배치 방향</p></div><div class="plan-actions"><button id="toggleSequence" type="button">전체 보기</button><button id="exportPlan" disabled>계획 내보내기</button></div></div>
+          <div class="plan-head"><div><span class="result-kicker">LOAD SEQUENCE</span><h2>적재 순서</h2><p class="coordinate-note">위치: 문·좌측·바닥을 기준으로 한 시작점 · 크기: 회전 후 실제 배치 방향</p></div><div class="plan-actions"><button id="toggleSequence" type="button">전체 보기</button><button id="exportPlan" disabled>Excel 계획 내보내기</button></div></div>
           <div class="sequence-empty" id="sequenceEmpty">시뮬레이션 결과가 여기에 표시됩니다.</div>
           <ol class="sequence-list" id="sequenceList"></ol>
         </div>
@@ -123,13 +123,13 @@
     <section class="guide" id="guide">
       <span class="result-kicker">HOW IT WORKS</span>
       <h2>세 단계로 완성하는 적재 계획</h2>
-      <div class="guide-grid"><article><b>01</b><h3>제품 정보 입력</h3><p>개별 등록 또는 Excel 업로드로 제품의 규격과 중량을 준비합니다.</p></article><article><b>02</b><h3>조건 설정</h3><p>컨테이너 규격과 공간·중량·순서 중 최적화 기준을 선택합니다.</p></article><article><b>03</b><h3>3D 계획 확인</h3><p>배치 위치와 적재 순서를 확인하고 현장용 CSV로 내려받습니다.</p></article></div>
+      <div class="guide-grid"><article><b>01</b><h3>제품 정보 입력</h3><p>개별 등록 또는 Excel 업로드로 제품의 규격과 중량을 준비합니다.</p></article><article><b>02</b><h3>조건 설정</h3><p>컨테이너 규격과 공간·중량·순서 중 최적화 기준을 선택합니다.</p></article><article><b>03</b><h3>3D 계획 확인</h3><p>배치 위치와 적재 순서를 확인하고 현장용 Excel 계획으로 내려받습니다.</p></article></div>
     </section>
   </main>
 
   <footer><span>LoadSpace</span><p>Container loading intelligence for better logistics.</p><small>© 2026 LoadSpace</small></footer>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="vendor/three.min.js?v=0.160.0"></script>
-  <script src="app.js?v=20260728-17"></script>
+  <script src="app.js?v=20260728-18"></script>
 </body>
 </html>
