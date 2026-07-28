@@ -115,34 +115,21 @@ function projectedWidthGap(remaining){if(remaining<=0)return 0;const widths=[...
 function cargoStabilityRisk(item){const base=Math.max(1,Math.min(item.l,item.w)),slender=item.h/base;return(item.shape==='cylinder'?2:0)+(slender>1.15?1:0)+(item.h>=1200?1:0)}
 function sortUnitsForPacking(units,priority){if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||(b.l*b.w-a.l*a.w)||b.weight-a.weight);else units.sort((a,b)=>b.volume-a.volume||(b.l*b.w-a.l*a.w)||b.weight-a.weight||(cargoStabilityRisk(b)-cargoStabilityRisk(a))||b.h-a.h)}
 function placementSupportRatio(s,d,placed){if(s.z===0)return 1;const [l,w]=d,base=l*w,support=placed.reduce((sum,p)=>{if(Math.abs(p.z+p.h-s.z)>2)return sum;const ox=Math.max(0,Math.min(s.x+l,p.x+p.l)-Math.max(s.x,p.x)),oy=Math.max(0,Math.min(s.y+w,p.y+p.w)-Math.max(s.y,p.y));return sum+ox*oy},0);return Math.min(1,support/Math.max(1,base))}
-function unsafeElevatedPlacement(item,d,s,placed,priority){if(s.z===0)return false;if(priority==='sequence')return true;const slender=d[2]/Math.max(1,Math.min(d[0],d[1])),support=placementSupportRatio(s,d,placed);return support<.8||item.shape==='cylinder'||slender>1.15}
 function placementCollides(s,d,placed){const [l,w,h]=d;return placed.some(p=>s.x<p.x+p.l&&s.x+l>p.x&&s.y<p.y+p.w&&s.y+w>p.y&&s.z<p.z+p.h&&s.z+h>p.z)}
+function extremePoints(placed,c){const xs=new Set([0]),ys=new Set([0]),zs=new Set([0]);placed.forEach(p=>{if(p.x+p.l<c.l)xs.add(p.x+p.l);if(p.y+p.w<c.w)ys.add(p.y+p.w);if(p.z+p.h<c.h)zs.add(p.z+p.h)});const points=[];for(const z of zs)for(const x of xs)for(const y of ys)if(!placed.some(p=>x>=p.x&&x<p.x+p.l&&y>=p.y&&y<p.y+p.w&&z>=p.z&&z<p.z+p.h))points.push({x,y,z});return points.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
+function supportingItems(s,d,placed){if(s.z===0)return[];const [l,w]=d;return placed.filter(p=>Math.abs(p.z+p.h-s.z)<2&&Math.min(s.x+l,p.x+p.l)-Math.max(s.x,p.x)>2&&Math.min(s.y+w,p.y+p.w)-Math.max(s.y,p.y)>2)}
+function validSupport(item,s,d,placed,priority){if(s.z===0)return true;const ratio=placementSupportRatio(s,d,placed),required=priority==='sequence'?1:.7,slender=d[2]/Math.max(1,Math.min(d[0],d[1])),supports=supportingItems(s,d,placed);return ratio>=required-1e-6&&supports.length>0&&!supports.some(p=>p.fragile)&&item.shape!=='cylinder'&&slender<=1.15}
+function findExtremePlacement(c,item,placed,priority,floorOnly=false){for(const s of extremePoints(placed,c)){if(floorOnly&&s.z>0)break;let pointBest=null;for(const d of allowedRotations(item)){if(s.x+d[0]>c.l||s.y+d[1]>c.w||s.z+d[2]>c.h||placementCollides(s,d,placed)||!validSupport(item,s,d,placed,priority))continue;const gap=transverseVoidAfterPlacement(s,d,placed,c),support=placementSupportRatio(s,d,placed),score=gap.internal*1e12+projectedWidthGap(gap.total)*1e8+(1-support)*1e6-d[0]*d[1];if(!pointBest||score<pointBest.score)pointBest={d,score}}if(pointBest)return{s,d:pointBest.d}}return null}
+function placeExtremeItem(item,best,placed){const [l,w,h]=best.d;placed.push({...item,x:best.s.x,y:best.s.y,z:best.s.z,l,w,h})}
+function packExtremeRaw(c,source,priority,seed=[],initialWeight=0){const units=[...source];sortUnitsForPacking(units,priority);const placed=seed.map(p=>({...p})),rejected=[];let totalWeight=initialWeight,pending=units;while(pending.length){let added=false;const deferred=[];for(const item of pending){if(totalWeight+item.weight>c.maxWeight){deferred.push(item);continue}const best=findExtremePlacement(c,item,placed,priority,true);if(!best){deferred.push(item);continue}placeExtremeItem(item,best,placed);totalWeight+=item.weight;added=true}pending=deferred;if(!added)break}for(const item of pending){if(totalWeight+item.weight>c.maxWeight){rejected.push({...item,reason:'중량 초과'});continue}const best=findExtremePlacement(c,item,placed,priority,false);if(!best){rejected.push({...item,reason:'공간 또는 지지 조건 부족'});continue}placeExtremeItem(item,best,placed);totalWeight+=item.weight}return{placed,rejected,totalWeight}}
+function finalizePacking(c,raw){const placed=raw.placed.map(p=>({...p}));shiftCargoInside(placed,c);orderPlacementsForLoading(placed);const volume=placed.reduce((sum,p)=>sum+p.l*p.w*p.h,0);return{container:c,placed,rejected:raw.rejected,totalWeight:raw.totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:raw.totalWeight/c.maxWeight*100}}
+function packPlan(c,units,priority){const safe=packExtremeRaw(c,units,'sequence');if(priority==='sequence')return finalizePacking(c,safe);const expanded=packExtremeRaw(c,safe.rejected,'volume',safe.placed,safe.totalWeight);return finalizePacking(c,expanded)}
 
 function simulate(){
   if(!products.length){alert('먼저 제품을 하나 이상 추가해 주세요.');return}
   const c=CONTAINERS[$('containerType').value], priority=$('optimization').value;
   let units=products.flatMap((p,pi)=>Array.from({length:p.qty},(_,n)=>({...p,pi,unit:n+1,volume:p.l*p.w*p.h})));
-  sortUnitsForPacking(units,priority);
-  const placed=[], rejected=[];let totalWeight=0;
-  const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}];
-  for(const item of units){
-    if(totalWeight+item.weight>c.maxWeight){rejected.push({...item,reason:'중량 초과'});continue}
-    const rotations=allowedRotations(item);let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of rotations){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&!unsafeElevatedPlacement(item,d,s,placed,priority)){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
-    if(!best){rejected.push({...item,reason:'공간 부족'});continue}
-    const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h,order:placed.length+1});totalWeight+=item.weight;
-    // guillotine subdivision: right, back, above. Small unusable spaces are pruned.
-    const next=[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}];
-    next.filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
-  }
-  let alreadyOrdered=false;
-  if(priority==='volume'){
-    const maximumPlan=buildMaximumFromSafeBase(c,units);
-    placed.splice(0,placed.length,...maximumPlan.placed);rejected.splice(0,rejected.length,...maximumPlan.rejected);totalWeight=maximumPlan.totalWeight;alreadyOrdered=true;
-  }
-  const productVolume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0), containerVolume=c.l*c.w*c.h;
-  if(!alreadyOrdered){shiftCargoInside(placed,c);orderPlacementsForLoading(placed)}
-  result={container:c,placed,rejected,totalWeight,volumeRate:productVolume/containerVolume*100,weightRate:totalWeight/c.maxWeight*100};
+  result=packPlan(c,units,priority);const placed=result.placed,rejected=result.rejected;
   const loads=[result];let remaining=rejected;
   while(remaining.length&&loads.length<50){const next=packAdditional(c,remaining,priority);if(!next.placed.length)break;loads.push(next);remaining=next.rejected}
   loads.forEach((load,i)=>load.containerNumber=i+1);
@@ -153,29 +140,7 @@ function simulate(){
   $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateOptions').classList.remove('needs-update');$('recalculateOptions').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();
 }
 function packAdditional(c,units,priority){
-  if(priority==='volume')return buildMaximumFromSafeBase(c,units);
-  units=[...units];sortUnitsForPacking(units,priority);
-  const placed=[],rejected=[];let totalWeight=0;const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}];
-  for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&!unsafeElevatedPlacement(item,d,s,placed,priority)){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
-  shiftCargoInside(placed,c);orderPlacementsForLoading(placed);const volume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0);return{container:c,placed,rejected,totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:totalWeight/c.maxWeight*100};
-}
-function buildMaximumFromSafeBase(c,units){
-  const base=packAdditional(c,units,'sequence'),placed=[...base.placed],rejected=[],floor=placed.filter(p=>p.z===0);let totalWeight=base.totalWeight;
-  const remaining=[...base.rejected];sortUnitsForPacking(remaining,'volume');
-  for(const item of remaining){
-    if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}
-    let best=null;
-    for(const support of floor)for(const d of allowedRotations(item)){
-      const s={x:support.x,y:support.y,z:support.z+support.h,l:support.l,w:support.w,h:c.h-support.z-support.h};
-      if(d[0]>s.l||d[1]>s.w||d[2]>s.h||placementCollides(s,d,placed)||unsafeElevatedPlacement(item,d,s,placed,'volume'))continue;
-      const ratio=placementSupportRatio(s,d,placed),score=(1-ratio)*1e12-s.x*1e5+s.y;
-      if(!best||score<best.score)best={s,d,score};
-    }
-    if(!best){rejected.push(item);continue}
-    const [l,w,h]=best.d;placed.push({...item,x:best.s.x,y:best.s.y,z:best.s.z,l,w,h});totalWeight+=item.weight;
-  }
-  orderPlacementsForLoading(placed);const volume=placed.reduce((sum,p)=>sum+p.l*p.w*p.h,0);
-  return{container:c,placed,rejected,totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:totalWeight/c.maxWeight*100};
+  return packPlan(c,units,priority);
 }
 function shiftCargoInside(placed,c){if(!placed.length)return;placed.forEach(p=>p.x=c.l-(p.x+p.l))}
 function orderPlacementsForLoading(placed){const remaining=[...placed],ordered=[],done=new Set(),overlap=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0)>2;while(remaining.length){let eligible=remaining.filter(p=>p.z===0||placed.filter(q=>q!==p&&Math.abs(q.z+q.h-p.z)<2&&overlap(p.x,p.x+p.l,q.x,q.x+q.l)&&overlap(p.y,p.y+p.w,q.y,q.y+q.w)).every(q=>done.has(q)));if(!eligible.length)eligible=remaining;eligible.sort((a,b)=>b.x-a.x||a.z-b.z||a.y-b.y);const next=eligible[0];ordered.push(next);done.add(next);remaining.splice(remaining.indexOf(next),1)}placed.splice(0,placed.length,...ordered);placed.forEach((p,i)=>p.order=i+1)}
@@ -214,15 +179,7 @@ function buildSecuringPlan(load){
 function uniqueRotations(p){const a=[[p.l,p.w,p.h],[p.w,p.l,p.h],[p.l,p.h,p.w],[p.h,p.l,p.w],[p.w,p.h,p.l],[p.h,p.w,p.l]];return a.filter((x,i)=>a.findIndex(y=>y.join()==x.join())===i)}
 function allowedRotations(p){return p.rotate?uniqueRotations(p):uniqueRotations({l:p.l,w:p.w,h:p.h}).filter(d=>d[2]===p.h)}
 function testContainer(c,priority){
-  let units=products.flatMap(p=>Array.from({length:p.qty},()=>({...p,volume:p.l*p.w*p.h})));
-  sortUnitsForPacking(units,priority);
-  const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}],placed=[];let loaded=0,weight=0;
-  for(const item of units){
-    if(weight+item.weight>c.maxWeight)continue;let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!placementCollides(s,d,placed)&&!unsafeElevatedPlacement(item,d,s,placed,priority)){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
-    if(!best)continue;const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;loaded++;weight+=item.weight;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});
-    [{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:s.l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
-  }return{loaded,total:units.length};
+  const units=products.flatMap(p=>Array.from({length:p.qty},()=>({...p,volume:p.l*p.w*p.h}))),packed=packPlan(c,units,priority);return{loaded:packed.placed.length,total:units.length};
 }
 function recommendContainer(currentKey,priority){
   const entries=Object.entries(CONTAINERS),start=entries.findIndex(([key])=>key===currentKey);
