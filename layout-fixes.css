@@ -2,6 +2,10 @@
   scroll-margin-top: 104px;
 }
 
+#planner > .control-panel {
+  align-self: start;
+}
+
 @media (max-width: 760px) {
   #planner {
     scroll-margin-top: 80px;

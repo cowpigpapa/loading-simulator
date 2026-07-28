@@ -30,6 +30,7 @@ function bindEvents(){
   $('fileInput').onchange=e=>readFile(e.target.files[0]);
   $('downloadTemplate').onclick=downloadTemplate;
   $('exportPlan').onclick=exportPlan;
+  $('toggleSequence').onclick=toggleSequence;
   $('viewIso').onclick=()=>setView('iso'); $('viewTop').onclick=()=>setView('top');
   $('resetView').onclick=()=>{camera={yaw:-0.63,pitch:0.42,zoom:1};draw()};
   $('prevStep').onclick=()=>setStep(visibleStep-1);
@@ -44,7 +45,7 @@ function bindEvents(){
   canvas.addEventListener('pointermove',e=>{if(!dragging)return;camera.yaw+=(e.clientX-last.x)*.008;camera.pitch=Math.max(.1,Math.min(1.1,camera.pitch+(e.clientY-last.y)*.006));last={x:e.clientX,y:e.clientY};draw()});
   canvas.addEventListener('pointerup',()=>dragging=false);
   canvas.addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.55,Math.min(2,camera.zoom*(e.deltaY>0?.9:1.1)));draw()},{passive:false});
-  window.addEventListener('resize',resizeCanvas);
+  window.addEventListener('resize',()=>{resizeCanvas();syncSequenceHeight()});
 }
 function switchTab(name){document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x.dataset.tab===name);x.setAttribute('aria-selected',x.dataset.tab===name)});$('manualPane').classList.toggle('active',name==='manual');$('uploadPane').classList.toggle('active',name==='upload')}
 function addProduct(){
@@ -129,8 +130,10 @@ function updateResults(){
   $('loadedCount').textContent=`${r.placed.length}개`;$('loadedDetail').textContent=`컨테이너 ${r.containerNumber||1} · 전체 ${total}개`;$('totalWeight').textContent=`${r.totalWeight.toLocaleString()} kg`;$('weightDetail').textContent=`허용 ${(r.container.maxWeight/1000).toFixed(1)} t`;
   const groups=[];r.placed.forEach(p=>{let g=groups.find(x=>x.name===p.name&&x.z===p.z&&x.x===p.x);if(g)g.count++;else groups.push({...p,count:1})});
   $('sequenceEmpty').style.display='none';$('sequenceList').innerHTML=groups.map((p,i)=>`<li><span class="num">${String(i+1).padStart(2,'0')}</span><span class="dot" style="background:${p.color};border-radius:${p.shape==='cylinder'?'50%':'2px'}"></span><div><strong>${esc(p.name)} × ${p.count} · ${p.shape==='cylinder'?'원통형':'박스형'}</strong><br><small>문에서 ${(p.x/1000).toFixed(2)}m 안쪽 · 바닥에서 ${(p.z/1000).toFixed(2)}m 높이</small></div><small>${p.l}×${p.w}×${p.h}</small></li>`).join('');$('exportPlan').disabled=false;
-  $('playback').style.display='flex';$('stepRange').max=r.placed.length;$('totalSteps').textContent=r.placed.length;setStep(r.placed.length);renderRecommendation();
+  $('playback').style.display='flex';$('stepRange').max=r.placed.length;$('totalSteps').textContent=r.placed.length;setStep(r.placed.length);renderRecommendation();requestAnimationFrame(syncSequenceHeight);
 }
+function toggleSequence(){const plan=document.querySelector('.loading-plan'),expanded=plan.classList.toggle('expanded');$('toggleSequence').textContent=expanded?'접기':'전체 보기';if(!expanded)requestAnimationFrame(syncSequenceHeight)}
+function syncSequenceHeight(){const plan=document.querySelector('.loading-plan'),list=$('sequenceList'),panel=document.querySelector('.control-panel');if(!plan||!list||!panel||plan.classList.contains('expanded'))return;const available=Math.max(220,Math.round(panel.getBoundingClientRect().bottom-list.getBoundingClientRect().top-24));list.style.setProperty('--sequence-max-height',`${available}px`)}
 function renderContainerTabs(){const el=$('containerTabs');if(!shipment){el.style.display='none';return}const total=shipment.containers.length;el.style.display='flex';el.innerHTML=`<button class="nav-arrow" id="prevContainer" ${activeContainer===0?'disabled':''} aria-label="이전 컨테이너">‹</button><span class="page-label">${activeContainer+1} / ${total}</span><button class="nav-arrow" id="nextContainerArrow" ${activeContainer===total-1?'disabled':''} aria-label="다음 컨테이너">›</button>`;$('prevContainer').onclick=()=>selectContainer(activeContainer-1);$('nextContainerArrow').onclick=()=>selectContainer(activeContainer+1)}
 function selectContainer(index){if(!shipment||!shipment.containers[index])return;activeContainer=index;result=shipment.containers[index];visibleStep=result.placed.length;stopPlayback();updateResults();resizeCanvas();draw()}
 function renderRecommendation(){
