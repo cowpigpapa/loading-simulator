@@ -95,6 +95,11 @@ function compactPlacementScore(s,d,placed,c,item,priority){
   const mx=(placed.reduce((sum,p)=>sum+(p.x+p.l/2)*p.weight,0)+(s.x+l/2)*item.weight)/Math.max(1,total);
   const my=(placed.reduce((sum,p)=>sum+(p.y+p.w/2)*p.weight,0)+(s.y+w/2)*item.weight)/Math.max(1,total);
   const balanceOffset=Math.abs(mx-c.l/2)+Math.abs(my-c.w/2);
+  if(priority==='volume'){
+    // Capacity mode uses the same transverse lookahead as safety mode, without its stacking restrictions.
+    const widthGap=projectedWidthGap(rawWidthGap);
+    return widthGap*1e15+rawWidthGap*1e12+s.z*1e7+(s.l*s.w*s.h-l*w*h)/1e3+(s.x+s.y)*100+sideRemainder*40-contact/8;
+  }
   if(priority==='sequence'){
     // Safety priority: transverse fill -> supported base -> lower stacking -> weight balance -> compact contact.
     const widthGap=projectedWidthGap(rawWidthGap),supportGap=1-placementSupportRatio(s,d,placed);
