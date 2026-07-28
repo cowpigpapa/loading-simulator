@@ -16,6 +16,7 @@ let playTimer = null;
 let threeView = null;
 let showDunnage = true;
 let showAirbags = true;
+const widthGapCache = new Map();
 const $ = id => document.getElementById(id);
 
 function init(){
@@ -89,10 +90,11 @@ function compactPlacementScore(s,d,placed,c,item,priority){
     if(ox&&oz&&(Math.abs(s.y-(p.y+p.w))<eps||Math.abs(s.y+w-p.y)<eps))contact+=ox*oz;
     if(ox&&oy&&Math.abs(s.z-(p.z+p.h))<eps)contact+=ox*oy;
   });
-  const sideRemainder=Math.min(Math.max(0,s.w-w),Math.max(0,s.l-l)),transversePenalty=priority==='sequence'?Math.max(0,s.w-w)*1800:0;
+  const sideRemainder=Math.min(Math.max(0,s.w-w),Math.max(0,s.l-l)),rawWidthGap=Math.max(0,s.w-w),transversePenalty=priority==='sequence'?(projectedWidthGap(rawWidthGap)*2500+rawWidthGap*40):0;
   let balancePenalty=0;if(priority==='weight'){const total=placed.reduce((sum,p)=>sum+p.weight,0)+item.weight,mx=(placed.reduce((sum,p)=>sum+(p.x+p.l/2)*p.weight,0)+(s.x+l/2)*item.weight)/total,my=(placed.reduce((sum,p)=>sum+(p.y+p.w/2)*p.weight,0)+(s.y+w/2)*item.weight)/total;balancePenalty=(Math.abs(mx-c.l/2)+Math.abs(my-c.w/2))*350}
   return s.z*1e12+(s.x+s.y)*200+sideRemainder*400+transversePenalty+(s.l*s.w*s.h-l*w*h)/1e8-contact/8+balancePenalty;
 }
+function projectedWidthGap(remaining){if(remaining<=0)return 0;const widths=[...new Set(products.flatMap(p=>allowedRotations(p).map(d=>Math.round(d[1]))).filter(w=>w>0&&w<=remaining))].sort((a,b)=>a-b),key=`${Math.round(remaining)}:${widths.join('-')}`;if(widthGapCache.has(key))return widthGapCache.get(key);if(!widths.length)return remaining;const reachable=new Uint8Array(Math.floor(remaining)+1);reachable[0]=1;for(let used=0;used<=remaining;used++){if(!reachable[used])continue;for(const width of widths)if(used+width<=remaining)reachable[used+width]=1}for(let used=Math.floor(remaining);used>=0;used--)if(reachable[used]){const gap=remaining-used;widthGapCache.set(key,gap);return gap}return remaining}
 function cargoStabilityRisk(item){const base=Math.max(1,Math.min(item.l,item.w)),slender=item.h/base;return(item.shape==='cylinder'?2:0)+(slender>1.15?1:0)+(item.h>=1200?1:0)}
 function sortUnitsForPacking(units,priority){if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);else units.sort((a,b)=>(cargoStabilityRisk(b)>0)-(cargoStabilityRisk(a)>0)||b.volume-a.volume||(b.l*b.w-a.l*a.w)||b.weight-a.weight||b.h-a.h)}
 function unsafeElevatedPlacement(item,d,s){if(s.z===0)return false;const slender=d[2]/Math.max(1,Math.min(d[0],d[1]));return item.shape==='cylinder'||slender>1.15}
