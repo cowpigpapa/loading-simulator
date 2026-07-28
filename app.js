@@ -26,9 +26,11 @@ function bindEvents(){
   document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>switchTab(tab.dataset.tab));
   $('addProduct').onclick=addProduct;
   $('loadDemo').onclick=loadDemo;
-  $('containerType').onchange=updateContainerSpec;
+  $('containerType').onchange=()=>{updateContainerSpec();markSimulationChanged()};
+  $('optimization').onchange=markSimulationChanged;
   $('simulate').onclick=simulate;
   $('recalculateList').onclick=simulate;
+  $('recalculateOptions').onclick=simulate;
   $('fileInput').onchange=e=>readFile(e.target.files[0]);
   $('downloadTemplate').onclick=downloadTemplate;
   $('exportPlan').onclick=exportPlan;
@@ -64,7 +66,7 @@ function loadDemo(){products=[
   {name:'필터 박스',group:'소모품',shape:'box',qty:16,l:600,w:500,h:450,weight:52,rotate:true,fragile:false}
 ].map((p,i)=>({...p,id:Date.now()+i,color:COLORS[i]}));renderProducts();simulate();document.querySelector('#planner').scrollIntoView({behavior:'smooth'})}
 function renderProducts(){
-  const total=products.reduce((s,p)=>s+p.qty,0);$('productCount').textContent=`(${products.length}개 품목 · ${total}박스)`;$('recalculateList').disabled=!products.length;
+  const total=products.reduce((s,p)=>s+p.qty,0);$('productCount').textContent=`(${products.length}개 품목 · ${total}박스)`;$('recalculateList').disabled=!products.length;$('recalculateOptions').disabled=!products.length;
   $('productList').innerHTML=products.length?products.map((p,i)=>`<div class="product-item"><span class="product-color" style="background:${p.color};border-radius:${p.shape==='cylinder'?'50%':'5px'}"></span><div><div class="product-title-row"><strong>${esc(p.name)}</strong><div class="qty-stepper" aria-label="${esc(p.name)} 수량"><span>수량</span><output>${p.qty}</output><span class="qty-arrows"><button type="button" data-qty-up="${i}" aria-label="수량 증가">▲</button><button type="button" data-qty-down="${i}" aria-label="수량 감소" ${p.qty<=1?'disabled':''}>▼</button></span></div></div><small>${p.group} · ${p.shape==='cylinder'?'원통형':'박스형'} · ${p.l}×${p.w}×${p.h} mm · ${p.weight} kg</small><div class="product-options"><label><input type="checkbox" data-lay="${i}" ${p.rotate?'checked':''}> 눕힘 허용</label><label><input type="checkbox" data-fragile="${i}" ${p.fragile?'checked':''}> 상부 적재 금지</label></div></div><button class="delete-product" data-delete="${i}" aria-label="${esc(p.name)} 삭제">×</button></div>`).join(''):'<div class="list-empty">아직 등록된 제품이 없습니다.</div>';
   document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{products.splice(+b.dataset.delete,1);renderProducts()});
   document.querySelectorAll('[data-qty-up]').forEach(button=>button.onclick=()=>changeProductQty(+button.dataset.qtyUp,1));
@@ -73,10 +75,10 @@ function renderProducts(){
   document.querySelectorAll('[data-fragile]').forEach(input=>input.onchange=()=>{products[+input.dataset.fragile].fragile=input.checked;markSimulationChanged()});
 }
 function changeProductQty(index,delta){if(!products[index])return;products[index].qty=Math.max(1,products[index].qty+delta);renderProducts();markSimulationChanged()}
-function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>';$('recalculateList').classList.add('needs-update');$('recalculateList').innerHTML='다시 계산 <b>→</b>'}
+function markSimulationChanged(){$('simulate').classList.add('needs-update');$('simulate').innerHTML='다시 계산 <b>→</b>';$('recalculateList').classList.add('needs-update');$('recalculateList').innerHTML='다시 계산 <b>→</b>';$('recalculateOptions').classList.add('needs-update')}
 function updateContainerSpec(){const c=CONTAINERS[$('containerType').value]||CONTAINERS['20ft'];$('containerSpec').innerHTML=`<div><span>내부 길이</span><strong>${(c.l/1000).toFixed(2)} m</strong></div><div><span>내부 폭 / 높이</span><strong>${(c.w/1000).toFixed(2)} / ${(c.h/1000).toFixed(2)} m</strong></div><div><span>최대 적재</span><strong>${(c.maxWeight/1000).toFixed(1)} t</strong></div>`}
 
-function compactPlacementScore(s,d,placed,c){
+function compactPlacementScore(s,d,placed,c,item,priority){
   const [l,w,h]=d,eps=2;
   let contact=0;
   if(s.x<eps)contact+=w*h;if(s.y<eps)contact+=l*h;if(s.z<eps)contact+=l*w;
@@ -88,10 +90,11 @@ function compactPlacementScore(s,d,placed,c){
     if(ox&&oy&&Math.abs(s.z-(p.z+p.h))<eps)contact+=ox*oy;
   });
   const sideRemainder=Math.min(Math.max(0,s.w-w),Math.max(0,s.l-l));
-  return s.z*1e12+(s.x+s.y)*200+sideRemainder*400+(s.l*s.w*s.h-l*w*h)/1e8-contact/8;
+  let balancePenalty=0;if(priority==='weight'){const total=placed.reduce((sum,p)=>sum+p.weight,0)+item.weight,mx=(placed.reduce((sum,p)=>sum+(p.x+p.l/2)*p.weight,0)+(s.x+l/2)*item.weight)/total,my=(placed.reduce((sum,p)=>sum+(p.y+p.w/2)*p.weight,0)+(s.y+w/2)*item.weight)/total;balancePenalty=(Math.abs(mx-c.l/2)+Math.abs(my-c.w/2))*350}
+  return s.z*1e12+(s.x+s.y)*200+sideRemainder*400+(s.l*s.w*s.h-l*w*h)/1e8-contact/8+balancePenalty;
 }
 function cargoStabilityRisk(item){const base=Math.max(1,Math.min(item.l,item.w)),slender=item.h/base;return(item.shape==='cylinder'?2:0)+(slender>1.15?1:0)+(item.h>=1200?1:0)}
-function sortUnitsForPacking(units,priority){units.sort((a,b)=>cargoStabilityRisk(b)-cargoStabilityRisk(a)||b.h-a.h||(priority==='weight'?b.weight-a.weight:b.volume-a.volume)||b.weight-a.weight)}
+function sortUnitsForPacking(units,priority){if(priority==='volume')units.sort((a,b)=>b.volume-a.volume||b.weight-a.weight);else if(priority==='weight')units.sort((a,b)=>b.weight-a.weight||b.volume-a.volume);else units.sort((a,b)=>cargoStabilityRisk(b)-cargoStabilityRisk(a)||b.h-a.h||b.volume-a.volume||b.weight-a.weight)}
 function unsafeElevatedPlacement(item,d,s){if(s.z===0)return false;const slender=d[2]/Math.max(1,Math.min(d[0],d[1]));return item.shape==='cylinder'||slender>1.15}
 
 function simulate(){
@@ -104,12 +107,12 @@ function simulate(){
   for(const item of units){
     if(totalWeight+item.weight>c.maxWeight){rejected.push({...item,reason:'중량 초과'});continue}
     const rotations=allowedRotations(item);let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of rotations){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!unsafeElevatedPlacement(item,d,s)){const score=compactPlacementScore(s,d,placed,c);if(!best||score<best.score)best={si,d,score}}}
+    for(let si=0;si<spaces.length;si++)for(const d of rotations){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
     if(!best){rejected.push({...item,reason:'공간 부족'});continue}
     const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h,order:placed.length+1});totalWeight+=item.weight;
     // guillotine subdivision: right, back, above. Small unusable spaces are pruned.
     const next=[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}];
-    next.filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
+    next.filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
   }
   const productVolume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0), containerVolume=c.l*c.w*c.h;
   shiftCargoInside(placed,c);placed.sort((a,b)=>b.x-a.x||a.z-b.z||a.y-b.y).forEach((p,i)=>p.order=i+1);
@@ -121,12 +124,12 @@ function simulate(){
   shipment={containers:loads,unallocated:remaining,totalUnits:units.length,containerKey:$('containerType').value,priority};
   result=loads[0];activeContainer=0;
   visibleStep=placed.length;stopPlayback();
-  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';updateResults();resizeCanvas();draw();
+  $('simulate').classList.remove('needs-update');$('simulate').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateList').classList.remove('needs-update');$('recalculateList').innerHTML='시뮬레이션 실행 <b>→</b>';$('recalculateOptions').classList.remove('needs-update');updateResults();resizeCanvas();draw();
 }
 function packAdditional(c,units,priority){
   units=[...units];sortUnitsForPacking(units,priority);
   const placed=[],rejected=[];let totalWeight=0;const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}];
-  for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!unsafeElevatedPlacement(item,d,s)){const score=compactPlacementScore(s,d,placed,c);if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
+  for(const item of units){if(totalWeight+item.weight>c.maxWeight){rejected.push(item);continue}let best=null;for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}if(!best){rejected.push(item);continue}const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});totalWeight+=item.weight;[{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y)}
   shiftCargoInside(placed,c);placed.sort((a,b)=>b.x-a.x||a.z-b.z||a.y-b.y).forEach((p,i)=>p.order=i+1);const volume=placed.reduce((s,p)=>s+p.l*p.w*p.h,0);return{container:c,placed,rejected,totalWeight,volumeRate:volume/(c.l*c.w*c.h)*100,weightRate:totalWeight/c.maxWeight*100};
 }
 function shiftCargoInside(placed,c){if(!placed.length)return;placed.forEach(p=>p.x=c.l-(p.x+p.l))}
@@ -170,9 +173,9 @@ function testContainer(c,priority){
   const spaces=[{x:0,y:0,z:0,l:c.l,w:c.w,h:c.h}],placed=[];let loaded=0,weight=0;
   for(const item of units){
     if(weight+item.weight>c.maxWeight)continue;let best=null;
-    for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&!unsafeElevatedPlacement(item,d,s)){const score=compactPlacementScore(s,d,placed,c);if(!best||score<best.score)best={si,d,score}}}
+    for(let si=0;si<spaces.length;si++)for(const d of allowedRotations(item)){const s=spaces[si];if(d[0]<=s.l&&d[1]<=s.w&&d[2]<=s.h&&(priority==='volume'||!unsafeElevatedPlacement(item,d,s))){const score=compactPlacementScore(s,d,placed,c,item,priority);if(!best||score<best.score)best={si,d,score}}}
     if(!best)continue;const s=spaces.splice(best.si,1)[0],[l,w,h]=best.d;loaded++;weight+=item.weight;placed.push({...item,x:s.x,y:s.y,z:s.z,l,w,h});
-    [{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
+    [{x:s.x+l,y:s.y,z:s.z,l:s.l-l,w:s.w,h:s.h},{x:s.x,y:s.y+w,z:s.z,l:l,w:s.w-w,h:s.h},{x:s.x,y:s.y,z:s.z+h,l:l,w:w,h:s.h-h}].filter((q,i)=>q.l>0&&q.w>0&&q.h>0&&(!item.fragile||i!==2)&&(priority==='volume'||item.shape!=='cylinder'||i!==2)).forEach(q=>spaces.push(q));spaces.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
   }return{loaded,total:units.length};
 }
 function recommendContainer(currentKey,priority){
