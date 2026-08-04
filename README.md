@@ -3,7 +3,7 @@
 제품 규격, 중량, 수량과 적재 제약을 입력하면 컨테이너별 배치·적재 순서·고정재 위치를 계산하고 3D로 보여주는 브라우저 기반 컨테이너 로딩 시뮬레이터입니다.
 
 - 공개 사이트: https://cowpigpapa.github.io/loading-simulator/
-- 제품 요구사항: [out/a6-prd.md](out/a6-prd.md)
+- 제품 요구사항: [LOADING-SIMULATOR-PRD.md](LOADING-SIMULATOR-PRD.md)
 
 ## 주요 기능
 
@@ -81,7 +81,7 @@ styles.css          기본 스타일
 layout-fixes.css    반응형 레이아웃 보정
 app.js              입력, 적재 알고리즘, 3D, 내보내기
 vendor/three.min.js 로컬 3D 엔진
-out/a6-prd.md       제품 요구사항 문서
+LOADING-SIMULATOR-PRD.md 제품 요구사항 문서
 ```
 
 ## 기술 구성
